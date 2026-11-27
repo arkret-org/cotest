@@ -135,7 +135,7 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
 
     Ok(())
 }
-/// Execute the canonical independent Realm/Circle receipt policy contract.
+/// Execute the canonical independent Realm receipt policy contract.
 /// Authentication flags are verifier preconditions, not production evidence.
 pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
     let fixture = crate::conformance::load_fixture_value("read-receipt-scope-policy-fixture.json")?;
@@ -211,7 +211,7 @@ fn scope_receipt_decision(input: &Value) -> Result<Value> {
     let scope: arkret_wire::ScopeRef = serde_json::from_value(input["scope_ref"].clone())?;
     if !matches!(
         scope,
-        arkret_wire::ScopeRef::Realm { .. } | arkret_wire::ScopeRef::Circle { .. }
+        arkret_wire::ScopeRef::Realm { .. }
     ) || [
         "basis_verified",
         "complete",

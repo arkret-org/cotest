@@ -109,7 +109,6 @@ fn content_selector(kind: &str) -> bool {
         kind,
         "realm"
             | "space"
-            | "circle"
             | "strand"
             | "message"
             | "morph"
@@ -276,11 +275,11 @@ pub fn run_agent_provision_vector() -> Result<()> {
         &ceiling_resources,
         &mandatory_constraints,
         &["ak.event.read"],
-        &[("circle", Some(realm), Some("ak:circle:019a7360"))],
+        &[("strand", Some(realm), Some("ak:strand:AZ6GqZWWvnQ2KFwbBD-MenomzWNz-31MUAuKzBXIP0zv"))],
         &["controller_approval_required"],
         arkret_wire::ReasonCode::AGENT_GRANT_EXCEEDS_REQUESTED_SCOPE,
     )
-    .map_err(|reason| anyhow!("Realm ceiling did not cover a Circle grant: {reason}"))?;
+    .map_err(|reason| anyhow!("Realm ceiling did not cover a Strand grant: {reason}"))?;
     if admit_scope_within_agent_ceiling(
         &ceiling_actions,
         &ceiling_resources,
@@ -1060,7 +1059,7 @@ pub fn run_agent_act_on_behalf_vector() -> Result<()> {
     }
     // Sidecar-create denial is part of the act-on-behalf pipeline
     // (controller's grant has not authorised the agent to write to
-    // the sidecar circle).
+    // the personal Sidecar).
     if arkret_wire::ReasonCode::SIDECAR_CREATE_DENIED != "sidecar_create_denied" {
         bail!(
             "arkret_wire::ReasonCode::SIDECAR_CREATE_DENIED spelling drifted: sidecar_create_denied"
@@ -1574,7 +1573,7 @@ fn session_content_decision(case: &Value, read_actions: &[Value]) -> &'static st
                                     && case["action"] == "ak.message.create"
                             }
                     }
-                    Some("realm" | "circle") => {
+                    Some("realm") => {
                         path["kind"] == "capability_grant"
                             || (read && path["kind"] == "membership_read")
                     }

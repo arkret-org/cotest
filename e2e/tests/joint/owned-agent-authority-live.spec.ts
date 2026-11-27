@@ -11,7 +11,6 @@ import type { Page, Locator, APIRequestContext, Request, Route } from "../../hel
 import { coauthBaseUrl, colandBaseUrl, mockEmailBaseUrl, requiredEnv } from "../../helpers/env";
 import { grantInviteConsentArkret, deliverInviteWithConsentGrant } from "../../helpers/contact-api";
 import { assertAuthoritySubmitOutcome, buildCapabilityGrantEnvelope, canonicalJson, grantCapabilityEventApi, rawSubmitSignedEventApi, refreshEventEnvelopeProof, resolveDefaultStrandId, retypeEventDerivedId, signedEventEnvelope, wireErrCode } from "../../helpers/coland-api";
-import { addCircleMemberRaw, createCircleArkret } from "../../helpers/circle-api";
 import { decodeIngressEvents } from "../../helpers/event-ingress";
 import { openDpopUserPageFromSession, registeredSubjectIdentityControl, type JointUserPage } from "../../helpers/users";
 import { createHash } from "node:crypto";
@@ -379,57 +378,26 @@ async function assertPolicyCurrent(request: APIRequestContext, user: JointUserPa
   return current;
 }
 
-test("administrator configures all Realm operations and Circle operations with exact current CAS through normal UI @agent-policy-admin", async ({ jointRealm, request }) => {
+test("administrator configures all Realm operations with exact current CAS through normal UI @agent-policy-admin", async ({ jointRealm, request }) => {
   const realm = jointRealm.realmId;
   const user = jointRealm.alicePage;
-  const circle = await createCircleArkret(request, await jointRealm.alicePage.currentSessionGrant(), {
-    actorId: jointRealm.alice.id, realmId: realm, title: "Management configuration Circle", joinRule: "public",
-  });
-  // The editor's original snapshot fence must have a genuinely readable Circle
-  // stream; creation/admin status alone is not a Circle membership fact.
-  expect((await addCircleMemberRaw(request, await jointRealm.alicePage.currentSessionGrant(), circle.circle_id, {
-    signerId: jointRealm.alice.id, actorId: jointRealm.alice.id, realmId: realm,
-  })).status()).toBe(200);
-  // Circle publish inherits Realm interaction and has no local producer. Its
-  // schema-valid configuration is not counted as a seventh Circle consumer.
-  for (const circleId of [undefined, circle.circle_id]) {
-    let editor = await loadPolicyEditor(user, realm);
-    if (circleId) await editor.getByLabel("Scope Circle id (blank means this Realm)", { exact: true }).fill(circleId);
-    const id = await editor.getByLabel("Exact Policy id", { exact: true }).inputValue();
-    let previous: string | null = null;
-    for (const operation of managementOperations.filter(op => !circleId || op !== "publish")) {
-      const rule = editor.locator(".agent-policy-rules > .event");
-      await chooseManagementOperations(rule, [operation]);
-      await selectProductOptionByLabel(rule.getByLabel("Effect", { exact: true }), "deny");
-      const write = await savePolicyEditor(user, editor, realm);
-      expect(write.event.payload!.expected_commit_id, "exact nullable CAS predecessor").toBe(previous);
-      expect((write.event.payload!.value as any).rules[0].agent_operations).toEqual([operation]);
-      expect((write.event.payload!.value as any).policy_kind).toBe("agent");
-      const current = await assertPolicyCurrent(request, jointRealm.alicePage, realm, write);
-      previous = current.current_state.revision.commit_id;
-      // A reload must re-read accepted exact current, not reuse the form as proof.
-      await user.page.reload({ waitUntil: "domcontentloaded" });
-      editor = await loadPolicyEditor(user, realm, id);
-      await expect(editor.locator(".agent-policy-rules > .event").getByRole("checkbox", { name: operation, exact: true })).toBeChecked();
-      await expect(editor.getByLabel("Scope Circle id (blank means this Realm)", { exact: true })).toHaveValue(circleId ?? "");
-    }
-    if (circleId) {
-      // This is only a legal Policy value. Public interaction still has its
-      // single Realm producer; this write is not Circle publish effectiveness.
-      const rule = editor.locator(".agent-policy-rules > .event");
-      await chooseManagementOperations(rule, ["publish"]);
-      const publish = await savePolicyEditor(user, editor, realm);
-      await assertPolicyCurrent(request, jointRealm.alicePage, realm, publish);
-      // No Circle management-review carrier exists. The editor must keep this
-      // otherwise well-shaped review intent from reaching Event publication.
-      await selectProductOptionByLabel(rule.getByLabel("Effect", { exact: true }), "require_review");
-      await rule.getByLabel("Approvers: complete SDK ActorId array", { exact: true }).fill(canonicalJson([
-        { kind: "account", account_id: jointRealm.aliceSession.accountId },
-      ]));
-      await expect(editor.locator(".agent-policy-save")).toBeDisabled();
-      expect(canonicalJson((await exactPolicy(request, jointRealm.alicePage, realm, id)).current_state.value)
-        === canonicalJson(publish.event.payload!.value)).toBe(true);
-    }
+  let editor = await loadPolicyEditor(user, realm);
+  const id = await editor.getByLabel("Exact Policy id", { exact: true }).inputValue();
+  let previous: string | null = null;
+  for (const operation of managementOperations) {
+    const rule = editor.locator(".agent-policy-rules > .event");
+    await chooseManagementOperations(rule, [operation]);
+    await selectProductOptionByLabel(rule.getByLabel("Effect", { exact: true }), "deny");
+    const write = await savePolicyEditor(user, editor, realm);
+    expect(write.event.payload!.expected_commit_id, "exact nullable CAS predecessor").toBe(previous);
+    expect((write.event.payload!.value as any).rules[0].agent_operations).toEqual([operation]);
+    expect((write.event.payload!.value as any).policy_kind).toBe("agent");
+    const current = await assertPolicyCurrent(request, jointRealm.alicePage, realm, write);
+    previous = current.current_state.revision.commit_id;
+    // A reload must re-read accepted exact current, not reuse the form as proof.
+    await user.page.reload({ waitUntil: "domcontentloaded" });
+    editor = await loadPolicyEditor(user, realm, id);
+    await expect(editor.locator(".agent-policy-rules > .event").getByRole("checkbox", { name: operation, exact: true })).toBeChecked();
   }
 });
 
@@ -529,7 +497,7 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
   expect(canonicalJson(after) === canonicalJson(before), "rejected Policy has no Event/Commit/current/quota/delivery effects").toBe(true);
 });
 
-test("normal administrator default denial admits an exact controller exception and Circle allow cannot override Realm denial @agent-policy-admin", async ({ jointRealm, request }) => {
+test("normal administrator default denial admits an exact controller exception @agent-policy-admin", async ({ jointRealm, request }) => {
   const realm = jointRealm.realmId;
   const user = jointRealm.alicePage;
   const consent = await grantInviteConsentArkret(request, await jointRealm.bobPage.currentSessionGrant(), jointRealm.bob, jointRealm.alice.id);
@@ -582,22 +550,12 @@ test("normal administrator default denial admits an exact controller exception a
   expect(rejectionBody.commit === undefined && rejectionBody.commits === undefined).toBe(true);
   expect(canonicalJson((await footprint(realm, jointRealm.bobSession.accountId.station_id)).tables) === canonicalJson(beforeJoin.tables)).toBe(true);
 
-  const circle = await createCircleArkret(request, await jointRealm.alicePage.currentSessionGrant(), {
-    actorId: jointRealm.alice.id, realmId: realm, title: "Parent management intersection", joinRule: "public" });
-  expect((await addCircleMemberRaw(request, await jointRealm.alicePage.currentSessionGrant(), circle.circle_id, {
-    signerId: jointRealm.alice.id, actorId: jointRealm.alice.id, realmId: realm,
-  })).status()).toBe(200);
   editor = await loadPolicyEditor(user, realm, id);
   await selectProductOptionByLabel(editor.getByLabel("Default effect", { exact: true }), "allow");
   rule = editor.locator(".agent-policy-rules > .event");
   await chooseManagementOperations(rule, ["authorize"]);
   await selectProductOptionByLabel(rule.getByLabel("Effect", { exact: true }), "deny");
   await savePolicyEditor(user, editor, realm);
-  const child = await loadPolicyEditor(user, realm);
-  await child.getByLabel("Scope Circle id (blank means this Realm)", { exact: true }).fill(circle.circle_id);
-  await chooseManagementOperations(child.locator(".agent-policy-rules > .event"), ["authorize"]);
-  await selectProductOptionByLabel(child.locator(".agent-policy-rules > .event").getByLabel("Effect", { exact: true }), "allow");
-  await assertPolicyCurrent(request, jointRealm.alicePage, realm, await savePolicyEditor(user, child, realm));
   // Grant admission consumes the accepted immutable provision/key custody.
   // Establish it before testing the parent authorize policy, then keep the
   // runtime offline so no Agent action can manufacture this admin authority.
@@ -616,12 +574,11 @@ test("normal administrator default denial admits an exact controller exception a
   } finally { await custody.dispose(); }
   const built = buildCapabilityGrantEnvelope({ ownerId: jointRealm.alice.id, realmId: realm, subjectId: agent,
     subjectStationId: jointRealm.aliceSession.accountId.station_id, actions: ["ak.message.create"] });
-  (built.envelope.payload as any).grant.resources = [{ kind: "circle", realm_id: realm, circle_id: circle.circle_id }];
   refreshEventEnvelopeProof(built.envelope);
   const before = await footprint(realm, jointRealm.aliceSession.accountId.station_id, String(built.envelope.event_id));
   const parentDenied = await rawSubmitSignedEventApi(request, await jointRealm.alicePage.currentSessionGrant(), built.envelope);
   const body = await parentDenied.json();
-  expect(parentDenied.status(), "Circle allow cannot override its Realm parent deny").toBe(403);
+  expect(parentDenied.status(), "Realm policy denies authorize").toBe(403);
   expect(wireErrCode(body) ?? body.reason_code).toBe("capability_denied");
   expect(body.commit === undefined && body.commits === undefined).toBe(true);
   expect(canonicalJson(await footprint(realm, jointRealm.aliceSession.accountId.station_id, String(built.envelope.event_id))) === canonicalJson(before)).toBe(true);

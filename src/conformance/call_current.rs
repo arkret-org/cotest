@@ -595,7 +595,7 @@ async fn run_case(fixture: &Value, case: &Value) -> Result<&'static str> {
                 ["media"]["screen"] = json!(true)
         }
         "wrong_scope" => {
-            snapshot["visible_stream_heads"][0]["stream_ref"] = json!({"kind":"circle","realm_id":fixture["request_context"]["realm_id"],"circle_id":arkret_wire::CircleId::from_event_id(&arkret_wire::EventId::from_digest(arkret_canonical::DigestSuite::Sha256,[99;32]))})
+            snapshot["visible_stream_heads"][0]["stream_ref"] = json!({"kind":"realm","realm_id":arkret_wire::RealmId::from_event_id(&arkret_wire::EventId::from_digest(arkret_canonical::DigestSuite::Sha256,[99;32]))})
         }
         "wrong_call" => {
             axis_mut(&mut snapshot, "call_roster")["selector"]["call_id"] = json!(

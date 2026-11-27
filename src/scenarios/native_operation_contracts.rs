@@ -4,7 +4,6 @@ use cotest_test_support::operation_observation::{NativeOperationObservations, ob
 use serde_json::{Value, json};
 
 mod call_invitation;
-mod circle_rotation;
 mod peer_consent;
 
 pub async fn peer_consent() -> Result<()> {
@@ -12,10 +11,6 @@ pub async fn peer_consent() -> Result<()> {
     crate::harness::heap_future(peer_consent::run).await
 }
 
-pub async fn circle_rotation() -> Result<()> {
-    validate_registered_schema_bindings()?;
-    crate::harness::heap_future(circle_rotation::run).await
-}
 
 pub async fn call_invitation() -> Result<()> {
     validate_registered_schema_bindings()?;

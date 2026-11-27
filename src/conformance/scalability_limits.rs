@@ -248,14 +248,6 @@ fn run_case(case: &Value) -> Result<()> {
         "authorization_grant_expansion" => {
             bounded_outcome(generator, "count", 1_024, "accept", "fail_closed")?
         }
-        "active_circle_count" => decision(generator, "realm_active_circle_count", 999)?,
-        "active_circle_count_by_composition" => {
-            composition_decision(generator, &["ordinary_active_circles"], 999)?
-        }
-        "actor_active_mls_circle_memberships" => decision(generator, "count", 255)?,
-        "actor_active_mls_circle_memberships_by_composition" => {
-            composition_decision(generator, &["ordinary_mls_circle_memberships"], 255)?
-        }
         "relation_chain" => {
             validate_relation_expansion_depth(case, generator)?;
             return Ok(());
@@ -540,18 +532,6 @@ fn validate_limit_values(generator: &Value, field: &str, limit: u64) -> Result<(
         bail!("generated limit matrix {field} drifted: expected {expected:?}, got {values:?}");
     }
     Ok(())
-}
-
-fn composition_decision(generator: &Value, fields: &[&str], maximum: u64) -> Result<&'static str> {
-    let composition = generator
-        .get("count_composition")
-        .ok_or_else(|| anyhow!("generated composition case missing count_composition"))?;
-    let count = fields.iter().try_fold(0_u64, |total, field| {
-        total
-            .checked_add(required_u64(composition, field)?)
-            .ok_or_else(|| anyhow!("generated composition count overflowed"))
-    })?;
-    Ok(if count <= maximum { "accept" } else { "reject" })
 }
 
 /// `ak.vector.scalability.relation_expansion_depth.v1` — a chain at the depth

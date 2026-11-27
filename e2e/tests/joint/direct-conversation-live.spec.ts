@@ -15,7 +15,7 @@ import { approvePairingLinkOnAuthorizedDevice, createDpopUserSession, selfPathHe
 import { serverLoginViaCoauth, submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";
 import { colandBaseUrl } from "../../helpers/env";
 
-import { captureDirectMainMessages, createDirectBoundaryCircleStrand, directStructureLifecycleGate, flatTopicChats, rejectDirectStructureEvent } from "../../helpers/direct-structure";
+import { captureDirectMainMessages, directStructureLifecycleGate, flatTopicChats, rejectDirectStructureEvent } from "../../helpers/direct-structure";
 
 const crossStationDirectTimeout = 1_500_000;
 
@@ -748,14 +748,12 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
       });
       const outsideStrand = await resolveDefaultStrandId(request, await currentAliceToken(), outsideRealm);
       const control = paired.page.page;
-      const circleStrand = await createDirectBoundaryCircleStrand(paired.page, request,
-        await currentAliceToken(), outsideRealm, `DM boundary Circle ${Date.now()}`);
       const third = await createDpopUserSession(request, "direct-outsider", {});
       expect(third, "negative author must be a real registered principal/device").toBeDefined();
       await control.goto(path, { waitUntil: "domcontentloaded" });
       await flatTopicChats(alice, bob, mainMessages, [paired.page.page], { request, token: await currentAliceToken(),
         peer: { token: await currentBobToken(), server: remoteBob ? "server2" : "default" }, boundaryTargets: {
-          realmStrand: outsideStrand, circleStrand: circleStrand!, thirdActor: accountActorId(third!.user.id), thirdToken: third!.grantJwt,
+          realmStrand: outsideStrand, thirdActor: accountActorId(third!.user.id), thirdToken: third!.grantJwt,
         } });
     } finally {
       await paired.page.close();

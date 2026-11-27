@@ -34,13 +34,7 @@ fn identity(actor: &ActorId, seed: u8) -> ArkretMlsIdentity {
 }
 
 fn scope() -> ScopeRef {
-    ScopeRef::Circle {
-        realm_id: RealmId::new(REALM).unwrap(),
-        circle_id: arkret_wire::CircleId::new(
-            "ak:circle:ASZ1iAvlGxgLC_-P6WHoR9vfijpaxbI5hoSwBx8zWTcT",
-        )
-        .unwrap(),
-    }
+    ScopeRef::Realm { realm_id: RealmId::new(REALM).unwrap() }
 }
 
 fn signature(context: DetachedSignatureContext) -> DetachedObjectSignature {
@@ -100,16 +94,7 @@ fn accepted(
     let commit = RealmCommit {
         commit_id: RealmCommitId::from_digest([position as u8; 32]),
         realm_id: RealmId::new(REALM).unwrap(),
-        stream_ref: match scope() {
-            ScopeRef::Circle {
-                realm_id,
-                circle_id,
-            } => CommitStreamRef::Circle {
-                realm_id,
-                circle_id,
-            },
-            _ => unreachable!(),
-        },
+        stream_ref: arkret_wire::CommitStreamRef::Realm { realm_id: event.realm_id.clone() },
         stream_position: position,
         previous_commit_ref: Some(RealmCommitId::from_digest([0x70; 32])),
         event_ref: event.event_id.clone(),
@@ -233,7 +218,7 @@ pub fn verify() -> Result<()> {
         DidCoreId::new("ak:did_core:web:station.example").unwrap(),
     ));
     let source_scope = ScopeRef::Realm {
-        realm_id: RealmId::new(REALM).unwrap(),
+        realm_id: RealmId::new("ak:realm:Ac1aCK8aQdnkYImvdH3DFjq4jDCP198pXYWCGzGuVyj5")?,
     };
     let mut source = identity(&invoker, 3).create_group_with_governance_binding(
         &source_scope,

@@ -11,7 +11,7 @@ function fixture(sources, check) {
   const root = mkdtempSync(join(base, "arkret-wire-ownership-"));
   try {
     const canonical = join(root, "spec-wire-objects.ts");
-    writeFileSync(canonical, "export type CircleView = { title: string };\n");
+    writeFileSync(canonical, "export type ContactView = { title: string };\n");
     for (const [name, source] of Object.entries(sources)) writeFileSync(join(root, name), source);
     const project = join(root, "tsconfig.json");
     writeFileSync(project, JSON.stringify({ compilerOptions: {
@@ -28,22 +28,22 @@ function fixture(sources, check) {
 
 test("canonical wire names cannot gain local, import, namespace or export aliases", () => {
   fixture({
-    "local.ts": 'import type { CircleView } from "./spec-wire-objects"; export type CircleOutcome = CircleView;',
-    "import.ts": 'import type { CircleView as CircleRow } from "./spec-wire-objects"; export {};',
-    "namespace.ts": 'import type * as wire from "./spec-wire-objects"; type CircleResult = wire.CircleView;',
-    "export.ts": 'export type { CircleView as CircleEntry } from "./spec-wire-objects";',
+    "local.ts": 'import type { ContactView } from "./spec-wire-objects"; export type ContactOutcome = ContactView;',
+    "import.ts": 'import type { ContactView as ContactRow } from "./spec-wire-objects"; export {};',
+    "namespace.ts": 'import type * as wire from "./spec-wire-objects"; type ContactResult = wire.ContactView;',
+    "export.ts": 'export type { ContactView as ContactEntry } from "./spec-wire-objects";',
   }, findings => {
-    assert.deepEqual(new Set(findings.map(row => row.name)), new Set(["CircleOutcome", "CircleRow", "CircleResult", "CircleEntry"]));
-    assert.ok(findings.every(row => row.canonical === "CircleView"));
+    assert.deepEqual(new Set(findings.map(row => row.name)), new Set(["ContactOutcome", "ContactRow", "ContactResult", "ContactEntry"]));
+    assert.ok(findings.every(row => row.canonical === "ContactView"));
   });
 });
 
 test("canonical re-exports and explicitly derived test projections remain distinct", () => {
   fixture({ "projection.ts": `
-    import type { CircleView } from "./spec-wire-objects";
-    export type { CircleView };
-    type CircleTitle = CircleView["title"];
-    type CircleTestProjection = Omit<CircleView, "title"> & { label: string };
+    import type { ContactView } from "./spec-wire-objects";
+    export type { ContactView };
+    type ContactTitle = ContactView["title"];
+    type ContactTestProjection = Omit<ContactView, "title"> & { label: string };
   ` }, findings => assert.deepEqual(findings, []));
 });
 

@@ -597,11 +597,10 @@ fn run_mention_composer_contract(vector: &Value, known: &AccountId) -> Result<()
         .get("routing_cases")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("routing cases missing"))?;
-    validate_case_names(routes, 15)?;
+    validate_case_names(routes, 14)?;
     for row in routes {
         let scope = match required_str(row, "scope")? {
             "realm" => AgentMentionComposerScope::Realm,
-            "circle" => AgentMentionComposerScope::Circle,
             "direct" => AgentMentionComposerScope::Direct,
             "sidecar" => AgentMentionComposerScope::Sidecar,
             other => bail!("unknown composer scope {other}"),

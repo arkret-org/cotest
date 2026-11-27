@@ -266,7 +266,6 @@ async fn run_lifecycle(
         use super::api_mls_migrations::MlsApiCase;
         let label = match api_case.context("native MLS case absent")? {
             MlsApiCase::MarkerPrivacy => "api-mls-marker-privacy",
-            MlsApiCase::CircleMarkers => "api-mls-circle-markers",
             MlsApiCase::Discussion => "api-mls-discussion",
             MlsApiCase::ReceiptSignals => "api-mls-receipt-signals",
         };
@@ -691,8 +690,6 @@ async fn run_lifecycle(
         "plaintext after Realm Genesis changed accepted durable state"
     );
     assert_second_genesis_refused(&alice, &genesis, &database_url).await?;
-    verify_circle_activation_independence(&alice, &realm_id, &database_url, genesis_observer)
-        .await?;
 
     // Add Bob: one inline Add Commit carrying the Welcome that names the claim.
     let add_binding =
@@ -1736,164 +1733,6 @@ async fn assert_second_genesis_refused(
     Ok(())
 }
 
-async fn verify_circle_activation_independence(
-    member: &Member,
-    realm: &RealmId,
-    database_url: &str,
-    observer: Option<&dyn MlsGenesisObserver>,
-) -> Result<()> {
-    use crate::scenarios::circle_poll_scope_live::{circle_create, circle_event, join_circle};
-    let circle = circle_create(
-        &member.client,
-        realm.as_str(),
-        &member.actor,
-        "Independent activation",
-        "Activation",
-    )
-    .await?;
-    join_circle(&member.client, realm.as_str(), &circle, &member.actor).await?;
-    let before = activation_durable_cut(database_url, realm).await?;
-    ensure!(
-        before["groups"]
-            .as_array()
-            .context("MLS current rows")?
-            .len()
-            == 1,
-        "the new Circle inherited its parent's accepted MLS group"
-    );
-    let strand = circle_event(&member.client, realm.as_str(), &circle, EventKind::StrandCreate,
-        json!({"object":{"schema":"ak.schema.strand.v1","realm_id":realm,"scope_circle_id":circle,
-            "tracks":{"discussion":{"is_primary":true,"profile":"discussion"}},
-            "metadata":{"title":"Independent activation"},"state":"active","created_by":member.actor}})).await?;
-    submit_and_expect_commit(
-        &member.client,
-        &member.account,
-        member.device.as_str(),
-        &strand,
-    )
-    .await?;
-    let strand_id = arkret_wire::StrandId::from_event_id(&strand.event_id);
-    let plaintext = circle_event(
-        &member.client,
-        realm.as_str(),
-        &circle,
-        EventKind::MessageCreate,
-        crate::harness::message_create_text_payload(
-            strand_id.as_str(),
-            "Circle before its own Genesis",
-        )?,
-    )
-    .await?;
-    submit_and_expect_commit(
-        &member.client,
-        &member.account,
-        member.device.as_str(),
-        &plaintext,
-    )
-    .await?;
-
-    let scope = ScopeRef::Circle {
-        realm_id: realm.clone(),
-        circle_id: circle.clone(),
-    };
-    let binding = MlsGovernanceBindingPayload::new(scope.clone(), None, 0, 0, 0)?;
-    let mut private_group = member
-        .mls_identity()?
-        .create_group_with_governance_binding(&scope, &binding)?;
-    let leaf = crate::scenarios::cross_station_mls_welcome::genesis_creator_leaf_authority(
-        &mut private_group,
-        member,
-    )?;
-    let (info, tree) = private_group.public_group_state_bytes()?;
-    let info_ref = upload_public_blob(&member.client, realm, &info).await?;
-    let tree_ref = upload_public_blob(&member.client, realm, &tree).await?;
-    let mut genesis = circle_event(
-        &member.client,
-        realm.as_str(),
-        &circle,
-        EventKind::MlsGenesis,
-        json!({"cipher_suite":ACTIVE_SUITE,"group_info_ref":info_ref,"ratchet_tree_ref":tree_ref,
-            "governance_binding":binding,"creator_leaf_authority":leaf,
-            "created_at":arkret_canonical::format_timestamp_canonical(chrono::Utc::now())}),
-    )
-    .await?;
-    if let Some(probe) = observer {
-        probe.before(member, &mut genesis, database_url).await?;
-    }
-    submit_and_expect_commit(
-        &member.client,
-        &member.account,
-        member.device.as_str(),
-        &genesis,
-    )
-    .await?;
-    if let Some(probe) = observer {
-        probe.after(member, &genesis, database_url).await?;
-    }
-    let after = activation_durable_cut(database_url, realm).await?;
-    let groups = after["groups"]
-        .as_array()
-        .context("independent MLS current rows")?;
-    ensure!(
-        groups.len() == 2 && groups.iter().any(|group| group == &before["groups"][0]),
-        "Circle Genesis changed the parent's MLS current or did not create its own group"
-    );
-    let late_plaintext = circle_event(
-        &member.client,
-        realm.as_str(),
-        &circle,
-        EventKind::MessageCreate,
-        crate::harness::message_create_text_payload(
-            strand_id.as_str(),
-            "Circle after its own Genesis",
-        )?,
-    )
-    .await?;
-    let refused = post_json(
-        &member.client,
-        &crate::publication::initial_submission(late_plaintext, "")?,
-    )
-    .await?;
-    ensure!(
-        refused.0 == StatusCode::CONFLICT && refused.1["reason_code"] == "mls_activation_required",
-        "plaintext after Circle Genesis was not refused: {refused:?}"
-    );
-    ensure!(
-        activation_durable_cut(database_url, realm).await? == after,
-        "Circle plaintext refusal changed accepted state"
-    );
-    assert_second_genesis_refused(member, &genesis, database_url).await?;
-    let original = circle_event(&member.client,realm.as_str(),&circle,EventKind::MessageCreate,
-        json!({"strand_id":strand_id,"track_name":"discussion","content":arkret::ContentBlock::text("Circle after activation")}),
-    ).await?;
-    let (encrypted, _) = crate::harness::content::seal_device_message(
-        &member.client,
-        &mut private_group,
-        &genesis.event_id,
-        original,
-    )
-    .await?;
-    let committed = submit_and_expect_commit(
-        &member.client,
-        &member.account,
-        member.device.as_str(),
-        &encrypted,
-    )
-    .await?;
-    let submission = crate::publication::initial_submission(encrypted, "")?;
-    let (status, replay) = post_json(&member.client, &submission).await?;
-    ensure!(
-        status == StatusCode::OK,
-        "the exact Circle replay was not accepted: {status} {replay}"
-    );
-    let replay: AuthoritySubmitResponseBody = serde_json::from_value(replay)?;
-    replay.validate_for_request(&arkret_wire::AuthoritySubmitRequestBody::Event(submission))?;
-    ensure!(
-        matches!(&replay, AuthoritySubmitResponseBody::Accepted { status: AuthorityCommitStatus::Duplicate, commit } if commit == &committed),
-        "the encrypted Circle replay did not preserve the duplicate outcome and original Commit: {replay:?}"
-    );
-    Ok(())
-}
 
 pub async fn post_json(
     client: &TestActorClient,

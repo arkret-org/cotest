@@ -467,9 +467,8 @@ pub async fn run_evidence() -> Result<Option<(Vec<CaseExecutionResult>, Vec<Case
             let url = db.connect_url.clone();
             let realm_copy = realm.clone();
             let mutation = mutation.to_owned();
-            let replacement_scope = serde_json::to_value(arkret_wire::ScopeRef::Circle {
-                realm_id: scope.realm_id().clone(),
-                circle_id: arkret_wire::CircleId::from_event_id(&genesis.event_id),
+            let replacement_scope = serde_json::to_value(arkret_wire::ScopeRef::Realm {
+                realm_id: arkret_wire::RealmId::from_event_id(&genesis.event_id),
             })?;
             Some(
                 tokio::task::spawn_blocking(move || -> Result<(Value, Vec<u8>)> {

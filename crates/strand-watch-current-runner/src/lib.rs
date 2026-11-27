@@ -539,9 +539,9 @@ mod tests {
             serde_json::from_value(request_wire()).unwrap();
         let mut wire = current_wire(12, Value::Null);
         wire["current_state"]["source_stream_ref"] = json!({
-            "kind": "circle",
+            "kind": "sidecar",
             "realm_id": REALM,
-            "circle_id": "ak:circle:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9"
+            "sidecar_id": "ak:sidecar:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9"
         });
         let outcome: StrandWatchCurrentResponseBody = serde_json::from_value(wire).unwrap();
         assert!(outcome.validate_for_request(&request).is_err());

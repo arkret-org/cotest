@@ -53,9 +53,9 @@ pub struct FuzzEventInput {
     pub semantic_refs: Vec<ArbRefValue>,
     pub payload: ArbValue,
     pub producer_proof: Option<ArbValue>,
-    /// A signed `scope_ref` is required on every v1 Event; a Circle scope
+    /// A signed `scope_ref` is required on every v1 Event; a Sidecar scope
     /// exercises the second variant of the enum.
-    pub scope_circle_id: Option<String>,
+    pub scope_sidecar_id: Option<String>,
 }
 
 #[derive(Debug, Arbitrary)]
@@ -67,11 +67,11 @@ pub struct ArbRefValue {
 
 impl FuzzEventInput {
     fn to_json(&self) -> Value {
-        let scope_ref = match &self.scope_circle_id {
-            Some(circle_id) => json!({
-                "kind": "circle",
+        let scope_ref = match &self.scope_sidecar_id {
+            Some(sidecar_id) => json!({
+                "kind": "sidecar",
                 "realm_id": self.realm_id,
-                "circle_id": circle_id,
+                "sidecar_id": sidecar_id,
             }),
             None => json!({ "kind": "realm", "realm_id": self.realm_id }),
         };
@@ -131,7 +131,7 @@ pub fn fuzz_event_envelope(data: &[u8]) -> Result<(), String> {
 #[derive(Debug, Arbitrary)]
 pub struct FuzzSignalInput {
     pub realm_id: String,
-    pub circle_id: Option<String>,
+    pub sidecar_id: Option<String>,
     pub sender_actor_id: String,
     pub sender_device_id: String,
     pub seal_ref: String,
@@ -173,11 +173,11 @@ impl ArbSignalClass {
 
 impl FuzzSignalInput {
     fn to_json(&self) -> Value {
-        let scope_ref = match &self.circle_id {
-            Some(circle_id) => json!({
-                "kind": "circle",
+        let scope_ref = match &self.sidecar_id {
+            Some(sidecar_id) => json!({
+                "kind": "sidecar",
                 "realm_id": self.realm_id,
-                "circle_id": circle_id,
+                "sidecar_id": sidecar_id,
             }),
             None => json!({ "kind": "realm", "realm_id": self.realm_id }),
         };

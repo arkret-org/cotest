@@ -1,10 +1,10 @@
-//! Current MLS activation and Circle directory-visibility vectors.
+//! Current MLS activation and history-visibility vectors.
 
 use std::collections::BTreeSet;
 
 use anyhow::{Context, Result, bail};
-use arkret_models_collaboration::governance::circle::{
-    CircleDirectoryVisibility, CircleScopeError, validate_mls_activation_is_irreversible,
+use arkret_models_collaboration::governance::mls_activation::{
+    MlsActivationError, validate_mls_activation_is_irreversible,
     validate_scope_mls_activation,
 };
 use serde_json::{Value, json};
@@ -14,16 +14,13 @@ const VECTOR_IDS: &[&str] = &[
     "ak.vector.e2ee.mls_activation_irreversible.v1",
     "ak.vector.e2ee.plaintext_write_after_activation_rejected.v1",
     "ak.vector.e2ee.ciphertext_write_before_activation_rejected.v1",
-    "ak.vector.circle.activation_independent_of_realm.v1",
-    "ak.vector.circle.directory_visibility_members_indistinguishable.v1",
-    "ak.vector.circle.directory_visibility_realm_members_indistinguishable.v1",
     "ak.vector.history_access.since_join_prejoin_denied.v1",
     "ak.vector.preview.token_scoped_stripped_state.v1",
 ];
 
 fn fixture() -> Result<Value> {
     let value = super::load_fixture_value(FIXTURE)?;
-    if value["profile"] != "ak.profile.circle_conformance.v1"
+    if value["profile"] != "ak.profile.core_event_store.v1"
         || value["runner"]["entrypoint"] != "ak.suite.visibility.policy.v1"
     {
         bail!("visibility policy fixture identity drifted");
@@ -55,11 +52,11 @@ fn assert_activation() -> Result<()> {
         || validate_mls_activation_is_irreversible(active, active).is_err()
         || !matches!(
             validate_mls_activation_is_irreversible(active, None),
-            Err(CircleScopeError::MlsActivationIrreversible)
+            Err(MlsActivationError::MlsActivationIrreversible)
         )
         || !matches!(
             validate_mls_activation_is_irreversible(active, Some("ak:mls_group:other")),
-            Err(CircleScopeError::MlsActivationIrreversible)
+            Err(MlsActivationError::MlsActivationIrreversible)
         )
     {
         bail!("MLS activation irreversibility drifted");
@@ -68,7 +65,7 @@ fn assert_activation() -> Result<()> {
         || validate_scope_mls_activation(active, true).is_err()
         || !matches!(
             validate_scope_mls_activation(active, false),
-            Err(CircleScopeError::MlsActivationRequired)
+            Err(MlsActivationError::MlsActivationRequired)
         )
     {
         bail!("activated scope plaintext-write gate drifted");
@@ -76,83 +73,16 @@ fn assert_activation() -> Result<()> {
     // A definitely inactive scope refuses ciphertext as a generic
     // failed_precondition that names no reason code.
     match validate_scope_mls_activation(None, true) {
-        Err(error @ CircleScopeError::MlsScopeInactive)
+        Err(error @ MlsActivationError::MlsScopeInactive)
             if !error.to_string().contains("reason=") => {}
         _ => bail!("inactive scope ciphertext-write gate drifted"),
     }
-    // The selected Circle scope is evaluated independently of the parent Realm.
+    // An independent Realm has its own accepted MLS state.
     if validate_scope_mls_activation(None, false).is_err()
         || validate_scope_mls_activation(active, false).is_ok()
     {
-        bail!("Circle MLS activation inherited the Realm default state");
+        bail!("independent Realm reused another Realm’s MLS state");
     }
-    Ok(())
-}
-
-fn key_set(value: &Value) -> Result<BTreeSet<&str>> {
-    Ok(value
-        .as_object()
-        .context("visibility projection must be an object")?
-        .keys()
-        .map(String::as_str)
-        .collect())
-}
-
-fn expected_keys<'a>(case: &'a Value, field: &str) -> Result<BTreeSet<&'a str>> {
-    case["expected"][field]
-        .as_array()
-        .with_context(|| format!("missing expected {field}"))?
-        .iter()
-        .map(|value| value.as_str().context("expected key must be a string"))
-        .collect()
-}
-
-fn reject_forbidden(value: &Value, names: &BTreeSet<&str>) -> Result<()> {
-    for name in names {
-        if value.get(*name).is_some() {
-            bail!("visibility projection leaked {name}");
-        }
-    }
-    Ok(())
-}
-
-fn assert_directory_visibility(fixture: &Value) -> Result<()> {
-    let members = case(
-        fixture,
-        "ak.vector.circle.directory_visibility_members_indistinguishable.v1",
-    )?;
-    let realm_members = case(
-        fixture,
-        "ak.vector.circle.directory_visibility_realm_members_indistinguishable.v1",
-    )?;
-    if serde_json::from_value::<CircleDirectoryVisibility>(json!("members"))?
-        != CircleDirectoryVisibility::Members
-        || serde_json::from_value::<CircleDirectoryVisibility>(json!("realm_members"))?
-            != CircleDirectoryVisibility::RealmMembers
-        || serde_json::from_value::<CircleDirectoryVisibility>(json!("public")).is_ok()
-    {
-        bail!("Circle directory visibility closed set drifted");
-    }
-    if members["expected"]["non_member_projection"] != "not_found"
-        || members["expected"]["absent_projection"] != "not_found"
-        || realm_members["expected"]["non_realm_projection"] != "not_found"
-        || members["expected"]["timing_bucket"] != realm_members["expected"]["timing_bucket"]
-    {
-        bail!("Circle non-member and absent projections differ");
-    }
-    let preview = json!({
-        "circle_id": "ak:circle:AUSenBRnepSegLPN_3QRmalt393LbZ9xTHIOK-qXDnHw",
-        "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
-        "visibility": "realm_members",
-        "display": {"color_token": "indigo", "symbol": {"glyph": "shield"}},
-        "member_count_bucket": "10_49",
-        "join_rule": "knock",
-        "opaque_commitment": format!("sha256:{}", "1".repeat(64)),
-    });
-    if key_set(&preview)? != expected_keys(realm_members, "preview_keys")? {
-        bail!("Realm-member preview key whitelist drifted");
-    }
-    reject_forbidden(&preview, &expected_keys(realm_members, "forbidden_fields")?)?;
     Ok(())
 }
 
@@ -172,7 +102,6 @@ pub fn run_visibility_policy_fixture_suite() -> Result<()> {
     {
         bail!("inactive scope ciphertext refusal contract drifted");
     }
-    assert_directory_visibility(&fixture)?;
     let history = case(
         &fixture,
         "ak.vector.history_access.since_join_prejoin_denied.v1",

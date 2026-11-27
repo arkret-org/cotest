@@ -95,11 +95,6 @@
       "test": "account_erasure_retains_native_terminal_intent_and_physical_receipt",
       "artifact": "account-erasure-status.json"
     },
-    "circle_rotation": {
-      "target": "native_operation_contracts",
-      "test": "circle_rotation_retains_actual_update_paths_welcome_and_original_replays",
-      "artifact": "circle-rotation.json"
-    },
     "mimi_proxy_download": {
       "target": "native_operation_contracts",
       "test": "mimi_proxy_download_retains_public_object_current_policy_and_provider_originals",
@@ -351,10 +346,6 @@
     {
       "operation_id": "ak.self.call.media.exchange.issue_token.v1",
       "native_case": "mls_interop"
-    },
-    {
-      "operation_id": "ak.self.circle.command.rotate_scope.v1",
-      "native_case": "circle_rotation"
     },
     {
       "operation_id": "ak.self.consent.command.replace.v1",

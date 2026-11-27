@@ -530,7 +530,7 @@ pub fn window_positions(
 /// already issued the exact snapshot at the window's anchor; that
 /// `snapshot_ref` reads back as an independent original signed for that stream. Without
 /// a prior issuance the limited window is `preview_only` with no basis. The
-/// retired `timeline_limit` member and an unprovable Circle selection are
+/// retired `timeline_limit` member and an unprovable Sidecar selection are
 /// refused rather than degraded.
 pub async fn limited_account_window_names_issued_basis_or_is_preview_only() -> Result<()> {
     let SnapshotAuthor {
@@ -727,8 +727,8 @@ pub async fn limited_account_window_names_issued_basis_or_is_preview_only() -> R
         "a limited window without an issued anchor is preview only: {preview_window:?}"
     );
 
-    // An unprovable Circle selection is refused, not silently dropped.
-    let circle = arkret_wire::CircleId::from_event_id(&arkret_wire::EventId::from_digest(
+    // An unprovable Sidecar selection is refused, not silently dropped.
+    let sidecar = arkret_wire::SidecarId::from_event_id(&arkret_wire::EventId::from_digest(
         arkret_canonical::DigestSuite::Sha256,
         [0x5c; 32],
     ));
@@ -737,7 +737,7 @@ pub async fn limited_account_window_names_issued_basis_or_is_preview_only() -> R
             &author,
             json!({
                 "realm_ids": [realm_id],
-                "stream_refs": [{"kind": "circle", "realm_id": realm_id, "circle_id": circle}]
+                "stream_refs": [{"kind": "sidecar", "realm_id": realm_id, "sidecar_id": sidecar}]
             }),
         )
         .await?,
@@ -749,7 +749,7 @@ pub async fn limited_account_window_names_issued_basis_or_is_preview_only() -> R
                 unavailable.error_code
                     == arkret_models_collaboration::sync_frames::demand_sync::RealmDetailErrorCode::TemporarilyUnavailable
             }),
-        "an unserved Circle selection is an explicit unavailable detail"
+        "an unserved Sidecar selection is an explicit unavailable detail"
     );
 
     // The retired filter member has no alias.

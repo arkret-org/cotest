@@ -438,7 +438,7 @@ fn envelope(
         sender_actor_id: &actor,
         sender_device_id: None,
         authority_commit_id: head,
-        parent_realm_authority_commit_id: None,
+
         signal_class: SignalClass::Session,
         sent_at,
         expires_at,
@@ -469,7 +469,7 @@ fn envelope(
         sender_actor_id: actor,
         sender_device_id: None,
         authority_commit_id: head.clone(),
-        parent_realm_authority_commit_id: None,
+
         signal_class: SignalClass::Session,
         sent_at,
         expires_at,

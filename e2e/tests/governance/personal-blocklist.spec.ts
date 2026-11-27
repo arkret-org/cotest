@@ -5,7 +5,6 @@
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { colandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
-import { actorRow } from "../../helpers/product-locators";
 import {
   accountActorId,
   joinRealmMemberByInviteApi,
@@ -162,8 +161,11 @@ test.describe("personal blocklist", () => {
     const aliceToken = aliceFlow.session.grantJwt;
     const bobToken = await issueUserSession(request, bob);
     // Bind the complete target through its accessible identity, including Station.
+    const bobAccount = accountActorId(bob.id).account_id;
     const bobBlockedRow = (page: typeof alicePage.page) =>
-      actorRow(page, ".blocked-user-row", accountActorId(bob.id));
+      page.locator(".blocked-user-row").filter({
+        has: page.getByText(`${bobAccount.principal_id} @ ${bobAccount.station_id}`, { exact: true }),
+      });
 
     try {
       // Inkson owns and rotates its grant. Observe the account stream from
@@ -199,7 +201,7 @@ test.describe("personal blocklist", () => {
         waitUntil: "domcontentloaded",
       });
       await expect(
-        alicePage.page.locator(".event:has(> .event-head :text-is(\"Personal blocklist\"))"),
+        alicePage.page.getByRole("heading", { name: "Personal blocklist", exact: true }),
       ).toBeVisible({
         timeout: 30_000,
       });
@@ -211,7 +213,8 @@ test.describe("personal blocklist", () => {
       // distinguished only by the complete ActorId carried in actor_id.
       await alicePage.page
         .locator(".block-target-input input, .block-target-input textarea")
-        .fill(JSON.stringify(accountActorId(bob.id)));
+        .fill(bobAccount.principal_id);
+      await alicePage.page.locator(".block-target-location input").fill(bobAccount.station_id);
       await alicePage.page.locator(".block-user-button").click();
       await expect(bobBlockedRow(alicePage.page).first()).toBeVisible({
         timeout: 30_000,

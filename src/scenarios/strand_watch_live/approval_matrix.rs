@@ -352,7 +352,7 @@ pub(super) async fn run(
     println!(
         "[registered-watch-approvals] real_two_stations=1 missing_refused=1 slot_digest_refused=1 unused_invalid_proof_zero_effects=1 whole_unit_signed=1 exact_private_nonces=2 exact_replay=1"
     );
-    // Remove the global review requirement before independent Circle cases.
+    // Remove the global review requirement before the following independent cases.
     let revoke = owner
         .author_event(
             realm,

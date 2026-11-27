@@ -52,8 +52,7 @@
 
 6. **alice** 进 `/settings/blocked-users`
    - 断言:`blocked-users-panel` 可见;`blocked-users-list` 渲染(可能为空)
-7. **alice** 在 `block-target-input` 填 bob 的完整 composite ActorId(JSON,
-   `{"kind":"account","account_id":{"principal_id","station_id"}}`),点 `block-user-button`
+7. **alice** 分别在 `block-target-input` 和 `block-target-location` 填入 bob 的身份 ID 和所属站点 ID，点击 `block-user-button`。
    - `client-preferences.md` §3.5 的机读 schema `account_blocklist_payload` 要求
      `target.actor_id` 是完整 ActorId；裸 principal DID 命名不出 Station，不能作为 target。
      service 自身作为发送者时也使用 `kind=actor` 加 `ActorId.service`；不得按 Organization、

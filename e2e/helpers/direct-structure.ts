@@ -6,7 +6,6 @@ import { openDirectChatNotification } from "./direct-notification";
 import { accountActorId } from "./coland-api";
 import { actorRow, withDiscussionUsersPanel } from "./product-locators";
 import { selectProductOptionByLabel } from "./product-select";
-import { getCircleArkret } from "./circle-api";
 import type { JointUserPage } from "./users";
 import { expect, test, operationSelector, isDirectAdmissionOutcomeReason } from "./arkret-test";
 import type { Page, Response, Request, APIRequestContext } from "@playwright/test";
@@ -26,99 +25,6 @@ import { observeSignalTransport } from "./signal-transport-observation";
 import { uint64Decimal } from "./uint64-decimal";
 import { publicMlsRuntimeDiagnostic } from "./mls-runtime-diagnostics";
 import { readOrdinaryHistoryDiagnostic } from "./ordinary-history-diagnostics";
-
-// Negative structure targets must exist outside Direct's protected Realm.
-// Circle creation does not create a Strand: author it with an explicit scope.
-export async function createDirectBoundaryCircleStrand(
-  user: JointUserPage, request: APIRequestContext, token: string, realmId: string, title: string,
-): Promise<string> {
-  const page = user.page;
-  await page.bringToFront();
-  await page.goto(`/realms/${encodeURIComponent(realmId)}/circles`, { waitUntil: "domcontentloaded" });
-  await user.clickWithPassivePromptRetry(page.locator(".circles-new"));
-  await user.fillWithPassivePromptRetry(page.locator(".circle-create-title input, .circle-create-title textarea"), title);
-  await expect(page.locator(".circle-encrypted")).not.toBeChecked();
-  await user.clickWithPassivePromptRetry(page.locator(".circle-create"));
-  await expect(page).toHaveURL(/\/realms\/[^/]+\/circles\/[^/]+$/, { timeout: 180_000 }).catch(async error => {
-    const statuses = await page.getByRole("status").allTextContents().catch(() => []);
-    await test.info().attach("safe-outside-circle-create", {
-      contentType: "application/json",
-      body: JSON.stringify({
-        creating: statuses.some(status => status.includes("Creating Circle and establishing initial membership")),
-        createEnabled: await page.locator(".circle-create").isEnabled().catch(() => false),
-        titleMatches: await page.locator(".circle-create-title input, .circle-create-title textarea").inputValue()
-          .then(value => value === title).catch(() => false),
-      }),
-    });
-    throw error;
-  });
-  const circleId = decodeURIComponent(new URL(page.url()).pathname.split("/").at(-1)!);
-  expect(circleId).toMatch(/^ak:circle:/);
-  await expect.poll(async () => {
-    const circle = await getCircleArkret(request, token, circleId);
-    expect(circle.circle_id).toBe(circleId);
-    expect(circle.realm_id).toBe(realmId);
-    expect(circle.title).toBe(title);
-    return circle.viewer_membership;
-  }, { timeout: 90_000 }).toBe("join");
-
-  await user.gotoTimelineRealm(realmId);
-  await user.clickWithPassivePromptRetry(page.locator(".open-channel-dialog"));
-  await expect(page.getByRole("dialog", { name: "New Strand", exact: true })).toBeVisible();
-  await user.fillWithPassivePromptRetry(page.locator(".new-channel-name"), `${title} Strand`);
-  const picker = page.locator(".circle-scope-picker");
-  await selectProductOptionByLabel(picker, new RegExp("^" + title.replace(/[^\w-]/g, "\\$&") + " \\(\\d+ members\\)$"));
-  await expect(picker.locator('button[aria-haspopup="listbox"]')).toContainText(title);
-  await user.clickWithPassivePromptRetry(page.locator(".create-channel-button"));
-  const channel = page.locator(".channel-item").filter({ hasText: `${title} Strand` });
-  // The joined Circle can appear in the picker before its signed current cut
-  // is installed. Only retry this known pre-authoring refusal; an unknown
-  // submission outcome must retain its original durable write identity.
-  await expect(async () => {
-    if (await channel.isVisible()) return;
-    const status = await page.locator(".chat-status").textContent();
-    if (status === "Strand create failed: MLS send gate is not ready: Circle send requires a verified Circle member current") {
-      await expect(page.locator(".new-channel-name")).toHaveValue(`${title} Strand`);
-      await expect(picker.locator('button[aria-haspopup="listbox"]')).toContainText(title);
-      await user.clickWithPassivePromptRetry(page.locator(".create-channel-button"));
-    }
-    await expect(channel).toBeVisible({ timeout: 1_000 });
-  }).toPass({ timeout: 60_000, intervals: [1_000, 2_000, 5_000] }).catch(async error => {
-    const status = await page.locator(".chat-status").textContent().catch(() => "");
-    const reasons = [
-      ["missing-circle-current", "Circle send requires a verified Circle member current"],
-      ["missing-parent-current", "Circle send requires a verified parent member current"],
-      ["incomplete-cut", "complete authorized-stream coverage"],
-      ["creating", "Creating Strand"],
-      ["created", "Strand created"],
-    ] as const;
-    await test.info().attach("safe-outside-circle-boundary", {
-      contentType: "application/json",
-      body: JSON.stringify({
-        status: reasons.find(([, copy]) => status?.includes(copy))?.[0] ?? "unclassified",
-        createDialogVisible: await page.getByRole("dialog", { name: "New Strand", exact: true }).isVisible().catch(() => false),
-        backupPromptVisible: await page.getByRole("dialog", { name: "Back up encrypted history", exact: true }).isVisible().catch(() => false),
-        channelCount: await channel.count(),
-      }),
-    });
-    throw error;
-  });
-
-  let strandId: string | undefined;
-  await expect.poll(async () => {
-    const history = await scanRealmStreamApi(request, token, realmId, {
-      streamRef: { kind: "circle", realm_id: realmId, circle_id: circleId }, limit: 1000,
-    });
-    expect(history.truncated).toBe(false);
-    const created = history.events.find(event => event.kind === "ak.strand.create");
-    if (!created) return undefined;
-    expect(created.scope_ref).toEqual({ kind: "circle", realm_id: realmId, circle_id: circleId });
-    if (typeof created.event_id !== "string") throw new Error("accepted Circle Strand has no Event id");
-    strandId = created.event_id.replace(/^ak:event:/, "ak:strand:");
-    return strandId;
-  }).toMatch(/^ak:strand:/);
-  return strandId!;
-}
 
 // Refusal diagnostics must not dump unexpected accepted Commit signatures.
 function structureOutcomeDiagnostic(outcome: Record<string, unknown>): string {
@@ -309,7 +215,7 @@ async function structureCut(proof: DirectStructureProof, realm: string,
     expect(scan.truncated, "boundary requires the complete readable accepted prefix").toBe(false);
     const last = scan.commits.at(-1) as Record<string, unknown> | undefined;
     expect(last?.commit_id === heads[0].commit_id, "scan and complete current must cover one exact head").toBe(true);
-    const protectedKinds = ["member_state", "circle_member_state", "realm_history_access",
+    const protectedKinds = ["member_state", "realm_history_access",
       "direct_conversation_binding", "mls_group"];
     const rows = orderByCanonicalKey(
       snapshot.current_state_entries.filter((row: any) => protectedKinds.includes(row.selector.kind)),
@@ -975,7 +881,7 @@ export async function setOwnedAgentLifecycleViaAdmin(page: Page, agentId: string
   await expect(toggle).toHaveAttribute("aria-checked", String(enabled), { timeout: 90_000 });
 }
 
-type DirectStructureProof = { request: APIRequestContext; token: string; agentId?: string; peer?: { token: string; server: ColandKey; currentToken?: () => Promise<string> }; boundaryTargets?: { realmStrand: string; circleStrand: string; thirdActor: ActorId; thirdToken: string } };
+type DirectStructureProof = { request: APIRequestContext; token: string; agentId?: string; peer?: { token: string; server: ColandKey; currentToken?: () => Promise<string> }; boundaryTargets?: { realmStrand: string; thirdActor: ActorId; thirdToken: string } };
 
 export async function rejectDirectStructureEvent(proof: DirectStructureProof, template: IngressEvent,
   name: string, kind: string, payload: Record<string, unknown>, reason?: string,
@@ -1811,12 +1717,10 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: DirectMai
   const hiddenBody = await hidden.json();
   expect(wireErrCode(hiddenBody)).toBe("not_found");
   for (const secret of [chatId, topicId, chatName, topicName]) expect(JSON.stringify(hiddenBody)).not.toContain(secret);
-  for (const [name, target] of [["cross-realm", boundary.realmStrand], ["cross-circle", boundary.circleStrand]]) {
-    await rejectSigned(`${name}-chat-write`, classified, "ak.strand.archive", { target_ref: target }, "direct_conversation_participant_authority_denied");
-    await rejectSigned(`${name}-watch`, classified, "ak.strand.watch.set", {
-      strand_id: target, watcher_actor_id: classified.actor_id, level: "muted",
-    }, "direct_conversation_participant_authority_denied");
-  }
+  await rejectSigned("cross-realm-chat-write", classified, "ak.strand.archive", { target_ref: boundary.realmStrand }, "direct_conversation_participant_authority_denied");
+  await rejectSigned("cross-realm-watch", classified, "ak.strand.watch.set", {
+    strand_id: boundary.realmStrand, watcher_actor_id: classified.actor_id, level: "muted",
+  }, "direct_conversation_participant_authority_denied");
   await rejectSigned("chat-track-overflow", classified, "ak.strand.update", {
     strand_id: chatId, patch: { tracks: { $op: "set", value: (chat.payload!.object as Record<string, unknown>).tracks } },
   }, "direct_conversation_participant_authority_denied");

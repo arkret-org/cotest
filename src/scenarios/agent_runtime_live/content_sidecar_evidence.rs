@@ -1349,7 +1349,7 @@ async fn verify_queued_history_loss(
     );
     let expected_membership = original
         .0
-        .parent_membership_revision(&ActorId::account(agent.clone()))
+        .active_realm_member_revision(&ActorId::account(agent.clone()))
         .context("original signed membership")?
         .commit_id
         .clone();

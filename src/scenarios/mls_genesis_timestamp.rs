@@ -22,7 +22,6 @@ struct Probe {
 fn scope_kind(scope: &ScopeRef) -> Result<&'static str> {
     Ok(match scope {
         ScopeRef::Realm { .. } => "realm",
-        ScopeRef::Circle { .. } => "circle",
         ScopeRef::Sidecar { .. } => "sidecar",
         _ => anyhow::bail!("timestamp fixture names an unsupported MLS scope"),
     })

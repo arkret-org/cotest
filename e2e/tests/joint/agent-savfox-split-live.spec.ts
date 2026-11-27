@@ -77,7 +77,7 @@ import {
 const APPROVAL_FALLBACK_POLL_MS = 30_000;
 const APPROVAL_NOTIFICATION_FEATURE = "ak.feature.agent_runtime_approval_notifications.v1";
 const AGENT_LIST_PATH = "/_arkret/self/agents";
-const ORIGINAL_COMPOSER_SCOPE_LABEL = /^(?:Send to this Realm discussion; visible to authorized readers of this scope|Visible to authorized readers in this Circle|Visible to the two participants in this direct conversation)$/;
+const ORIGINAL_COMPOSER_SCOPE_LABEL = /^(?:Send to this Realm discussion; visible to authorized readers of this scope|Visible to the two participants in this direct conversation)$/;
 const AGENT_LIST_GLOB = "**/_arkret/self/agents";
 const ACCOUNT_SUBSCRIBE_PATH = "/_arkret/self/account/subscribe";
 const RUNTIME_KEY_REQUEST_STATUS_PATH =
@@ -2192,19 +2192,6 @@ async function assertSidecarNonDisclosure(
   expect(ordinaryMemberListText).not.toMatch(
     /backing_circle|private_strand|agent_sidecar_of|exchange_id/,
   );
-
-  const circleListUrl = `${base}/_arkret/self/circles?realm_id=${encodeURIComponent(jointRealm.realmId)}`;
-  const ordinaryCircleList = await request.get(circleListUrl, {
-    headers: selfPathHeadersForDpopSession(
-      jointRealm.bobSession,
-      "GET",
-      circleListUrl,
-    ),
-  });
-  const ordinaryCircleListText = await ordinaryCircleList.text();
-  expect(ordinaryCircleList.status(), ordinaryCircleListText).toBe(200);
-  expect(ordinaryCircleListText).not.toContain(sidecarId);
-  expect(ordinaryCircleListText).not.toContain("agent_sidecar_of");
 
   const anonymousView = await request.get(detailUrl);
   const anonymousText = await anonymousView.text();

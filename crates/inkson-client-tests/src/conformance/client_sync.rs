@@ -50,9 +50,9 @@ const ORDERING_CASES: [&str; 2] = [
     "projection_is_installed_before_the_checkpoint_advances",
     "checkpoint_before_projection_is_rejected",
 ];
-const CIRCLE_TAIL_CASE: &str = "circle_stream_tail_is_independent";
+const SECOND_REALM_TAIL_CASE: &str = "second_realm_stream_tail_is_independent";
 const STREAM_GAP_CASE: &str = "unexplained_position_jump_stops_only_that_stream";
-const MISSING_CIRCLE_CASE: &str = "one_missing_stream_tail_recovers_only_that_stream";
+const MISSING_REALM_CASE: &str = "one_missing_stream_tail_recovers_only_that_stream";
 const REVISION_STALE_CASE: &str = "revision_stale_keeps_the_cursor_and_continues_backfill";
 pub const PRODUCTION_CASE_COUNT: usize = CASES.len()
     + RECOVERY_CASES.len()
@@ -283,7 +283,7 @@ impl AccountSubscribeTransport for StreamGapRail {
                 ensure!(after["verified_commit_stream_cursors"][&healthy_key]["stream_position"] == healthy.stream_position
                     && after["verified_commit_stream_anchors"][&healthy_key] == serde_json::to_value(&healthy)?
                     && healthy.stream_position > self.before["verified_commit_stream_cursors"][&healthy_key]["stream_position"].as_u64().context("prior healthy position")?,
-                    "incomplete Circle blocked its healthy Realm sibling");
+                    "incomplete second Realm blocked its healthy Realm sibling");
                 ensure!(
                     read_database_evidence(
                         &self.database_url,
@@ -303,7 +303,7 @@ impl AccountSubscribeTransport for StreamGapRail {
                 )?;
                 ensure!(
                     recovery::private_state(&after) == recovery::private_state(&self.before),
-                    "incomplete Circle tail changed private history or MLS before retry"
+                    "incomplete second Realm tail changed private history or MLS before retry"
                 );
             }
             if visit == 2 && self.row_fault.is_some() {
@@ -389,7 +389,7 @@ impl AccountSubscribeTransport for StreamGapRail {
             }
             if self.row_fault.is_none() && faults != 1 {
                 return Err(garth::Error::Protocol(
-                    "gap fixture lacks one independent Circle window".into(),
+                    "gap fixture lacks one independent second Realm window".into(),
                 ));
             }
         }
@@ -1156,7 +1156,7 @@ impl SidecarSyncObserver for Probe {
         let realm = arkret_wire::RealmId::new(
             cotest::scenarios::human_device_producer_live::create_realm_with_join_rule(
                 &controller.client,
-                "Independent Circle recovery",
+                "Independent second Realm recovery",
                 "public",
                 &[servers.server(0)],
             )
@@ -1694,7 +1694,7 @@ impl Probe {
         });
         self.projection_checkpoint_ordering(controller, &realm)
             .await?;
-        self.circle_tail(controller, &realm, database_url).await?;
+        self.second_realm_tail(controller, &realm, database_url).await?;
         Ok(())
     }
 }
@@ -1735,21 +1735,7 @@ impl Probe {
             "ordering has no actual native account/current database"
         );
         let database = rusqlite::Connection::open(&index_path)?;
-        let circle = cotest::scenarios::circle_poll_scope_live::circle_create(
-            &controller.client,
-            realm.as_str(),
-            &controller.actor,
-            "Checkpoint ordering",
-            "Ordering",
-        )
-        .await?;
-        cotest::scenarios::circle_poll_scope_live::join_circle(
-            &controller.client,
-            realm.as_str(),
-            &circle,
-            &controller.actor,
-        )
-        .await?;
+        controller.client.create_strand(realm.as_str(), "Checkpoint ordering").await?;
         let stream = arkret_wire::CommitStreamRef::Realm {
             realm_id: realm.clone(),
         };
@@ -1920,30 +1906,12 @@ impl Probe {
         database_url: &str,
         private_scope: Option<&ScopeRef>,
     ) -> Result<()> {
-        use cotest::scenarios::circle_poll_scope_live::{circle_create, circle_event, join_circle};
         use cotest::scenarios::human_device_producer_live::submit_and_expect_commit;
         let producer = controller;
-        let circle = circle_create(
-            &producer.client,
-            realm.as_str(),
-            &producer.actor,
-            "Readable row gap",
-            "Row gap",
-        )
-        .await?;
-        join_circle(
-            &controller.client,
-            realm.as_str(),
-            &circle,
-            &controller.actor,
-        )
-        .await?;
-        let stream = arkret_wire::CommitStreamRef::Circle {
-            realm_id: realm.clone(),
-            circle_id: circle.clone(),
-        };
+        let other_realm = arkret_wire::RealmId::new(controller.client.create_realm("Readable row gap").await?)?;
+        let stream = arkret_wire::CommitStreamRef::Realm { realm_id: other_realm.clone() };
         let case_id = if private_scope.is_some() {
-            MISSING_CIRCLE_CASE
+            MISSING_REALM_CASE
         } else {
             STREAM_GAP_CASE
         };
@@ -1957,7 +1925,7 @@ impl Probe {
             controller.account.clone(),
             controller.device.clone(),
             inkson::LocalStateStore::with_path(path.clone()),
-            realm.clone(),
+            other_realm.clone(),
         )
         .await?;
         let baseline = ObservedRail {
@@ -1978,7 +1946,7 @@ impl Probe {
                     && before["verified_sidecar_history"]
                         .as_object()
                         .is_some_and(|m| !m.is_empty()),
-                "Circle recovery needs the original nonempty private state"
+                "second Realm recovery needs the original nonempty private state"
             );
         }
         let cursor = host
@@ -1986,16 +1954,12 @@ impl Probe {
             .sync_cursor()
             .context("row gap prior cursor")?;
         let key = serde_json::to_string(&stream)?;
-        ensure!(
-            before["verified_commit_stream_cursors"][&key]["stream_position"] == 0,
-            "row gap did not start at a durable signed genesis"
-        );
+        let base_position = before["verified_commit_stream_cursors"][&key]["stream_position"]
+            .as_u64().context("accepted Realm baseline")?;
         let mut commits = Vec::new();
         for title in ["Missing original one", "Visible original two"] {
-            let event = circle_event(&producer.client, realm.as_str(), &circle,
-                arkret_wire::EventKind::StrandCreate,
-                serde_json::json!({"object":{"schema":"ak.schema.strand.v1", "realm_id":realm,
-                    "scope_circle_id":circle, "tracks":{"discussion":{"is_primary":true,"profile":"discussion"}},
+            let event = producer.client.author_event(other_realm.as_str(), arkret_wire::EventKind::StrandCreate.as_str(),
+                serde_json::json!({"object":{"schema":"ak.schema.strand.v1", "realm_id":other_realm, "tracks":{"discussion":{"is_primary":true,"profile":"discussion"}},
                     "metadata":{"title":title}, "state":"active", "created_by":producer.actor}})).await?;
             commits.push(
                 submit_and_expect_commit(
@@ -2008,15 +1972,15 @@ impl Probe {
             );
         }
         ensure!(
-            commits[0].stream_position == 1
-                && commits[1].stream_position == 2
+            commits[0].stream_position == base_position + 1
+                && commits[1].stream_position == base_position + 2
                 && commits[1].previous_commit_ref.as_ref() == Some(&commits[0].commit_id),
             "row gap setup has no genuine accepted continuous originals"
         );
         let request = arkret_wire::StreamScanRequestBody {
-            realm_id: realm.clone(),
+            realm_id: other_realm.clone(),
             stream_ref: stream.clone(),
-            direction: arkret_wire::StreamScanDirection::After(None),
+            direction: arkret_wire::StreamScanDirection::After(base_position.checked_sub(1)),
             limit: 32,
         };
         let original = controller.client.sdk().scan_commit_stream(&request).await?;
@@ -2034,7 +1998,7 @@ impl Probe {
                         arkret_wire::StrandId::new(
                             producer.client.default_strand_id(realm.as_str())?,
                         )?,
-                        "Healthy Realm progress during Circle recovery",
+                        "Healthy Realm progress during second Realm recovery",
                     )?,
                 )
                 .await?;
@@ -2051,14 +2015,7 @@ impl Probe {
             )
             .await?;
         } else {
-            circle_create(
-                &controller.client,
-                realm.as_str(),
-                &controller.actor,
-                "Row gap healthy sibling",
-                "Row sibling",
-            )
-            .await?;
+            controller.client.create_strand(realm.as_str(), "Row gap healthy sibling").await?;
         }
         let http = controller.client.sdk();
         // Earlier capacity cases deliberately retain this real unacknowledged
@@ -2082,7 +2039,7 @@ impl Probe {
             .as_ref()
             .context("real HTTP scan relay")?
             .control();
-        fault.omit_position_one(stream.clone());
+        fault.omit_position(stream.clone(), base_position + 1);
         let skipped: arkret_wire::StreamScanResponseBody = serde_json::from_value(
             cotest::harness::expect_json(
                 controller
@@ -2104,7 +2061,7 @@ impl Probe {
         );
         ensure!(
             matches!(skipped.validate_for_request(&request),
-            Err(arkret_wire::WireError::StreamPositionGap { ref stream_ref, expected: 1, actual: 2 }) if *stream_ref == stream),
+            Err(arkret_wire::WireError::StreamPositionGap { ref stream_ref, expected, actual }) if *stream_ref == stream && expected == base_position + 1 && actual == base_position + 2),
             "actual HTTP zero/two scan did not identify its exact readable gap"
         );
         fault.clear_scan_requests();
@@ -2152,7 +2109,7 @@ impl Probe {
                 .lock()
                 .unwrap()
                 .clone()
-                .context("Circle recovery lacks a verified retry boundary")?;
+                .context("second Realm recovery lacks a verified retry boundary")?;
             let after = state(&host)?;
             let prior = retry_before["verified_commit_stream_cursors"]
                 .as_object()
@@ -2162,7 +2119,7 @@ impl Probe {
                 .context("recovered stream heads")?;
             ensure!(
                 prior.keys().eq(recovered.keys()),
-                "Circle recovery replaced the stream inventory"
+                "second Realm recovery replaced the stream inventory"
             );
             let changed = prior
                 .iter()
@@ -2175,10 +2132,10 @@ impl Probe {
                 .collect::<std::collections::BTreeSet<_>>();
             ensure!(
                 changed == [key.as_str()].into_iter().collect(),
-                "Circle recovery changed unrelated durable stream progress: {changed:?}"
+                "second Realm recovery changed unrelated durable stream progress: {changed:?}"
             );
             cotest::transcripts::record_vector_event(
-                "sync.client_account_stream.circle_recovery_scans",
+                "sync.client_account_stream.second_realm_recovery_scans",
                 &serde_json::json!({"case_id":case_id,"affected_stream":stream}),
                 &serde_json::json!({"recovered_streams":[stream.clone()]}),
                 &serde_json::json!({"retry_scan_requests":scans,"accepted_dependency_refs":dependencies,"installed_recovered_streams":[stream.clone()],"complete_suite_claim":false}),
@@ -2188,14 +2145,14 @@ impl Probe {
         if let Some(scope) = private_scope {
             ensure!(
                 recovery::private_state(&recovered_state) == recovery::private_state(&before),
-                "Circle recovery changed the original private history or MLS"
+                "second Realm recovery changed the original private history or MLS"
             );
             ensure!(
                 Some(inkson::conformance::retained_sidecar_cut(
                     &host.state_store(),
                     scope
                 )?) == private_cut,
-                "Circle recovery changed the original private signed cut"
+                "second Realm recovery changed the original private signed cut"
             );
         }
         let healthy_key = serde_json::to_string(&rail.healthy_stream)?;
@@ -2219,7 +2176,7 @@ impl Probe {
         );
         let after = state(&host)?;
         ensure!(
-            after["verified_commit_stream_cursors"][&key]["stream_position"] == 2
+            after["verified_commit_stream_cursors"][&key]["stream_position"] == base_position + 2
                 && after["verified_commit_stream_anchors"][&key]
                     == serde_json::to_value(&commits[1])?,
             "row gap recovered without its authentic position-two anchor"
@@ -2227,7 +2184,7 @@ impl Probe {
         let cut = inkson::conformance::retained_realm_current(
             &host.state_store(),
             &controller.account,
-            realm,
+            stream.realm_id(),
         )
         .await?;
         let cursor = host
@@ -2245,7 +2202,7 @@ impl Probe {
         std::fs::write(
             &evidence,
             serde_json::to_vec(&serde_json::json!({
-            "account":controller.account, "realm":realm, "cut":cut, "cursor":cursor,
+            "account":controller.account, "realm":other_realm, "cut":cut, "cursor":cursor,
             "stream_key":key, "head":after["verified_commit_stream_cursors"][&key],
             "anchor":commits[1], "stream_heads":after["verified_commit_stream_cursors"],
             "stream_anchors":after["verified_commit_stream_anchors"],
@@ -2266,44 +2223,26 @@ impl Probe {
         Ok(())
     }
 
-    async fn circle_tail(
+    async fn second_realm_tail(
         &self,
         controller: &Member,
         realm: &arkret_wire::RealmId,
         database_url: &str,
     ) -> Result<()> {
-        use cotest::scenarios::circle_poll_scope_live::{circle_create, circle_event, join_circle};
         use cotest::scenarios::human_device_producer_live::submit_and_expect_commit;
-        let circle = circle_create(
-            &controller.client,
-            realm.as_str(),
-            &controller.actor,
-            "Independent Sync tail",
-            "Sync tail",
-        )
-        .await?;
-        join_circle(
-            &controller.client,
-            realm.as_str(),
-            &circle,
-            &controller.actor,
-        )
-        .await?;
-        let stream = arkret_wire::CommitStreamRef::Circle {
-            realm_id: realm.clone(),
-            circle_id: circle.clone(),
-        };
+        let other_realm = arkret_wire::RealmId::new(controller.client.create_realm("Independent sync tail").await?)?;
+        let stream = arkret_wire::CommitStreamRef::Realm { realm_id: other_realm.clone() };
         let key = serde_json::to_string(&stream)?;
         let parent_key = serde_json::to_string(&arkret_wire::CommitStreamRef::Realm {
             realm_id: realm.clone(),
         })?;
-        let path = self.directory.path().join("circle-state.json");
+        let path = self.directory.path().join("second-realm-state.json");
         let host = NativeAccountHost::new_for_realm(
             controller.client.sdk(),
             controller.account.clone(),
             controller.device.clone(),
             inkson::LocalStateStore::with_path(path.clone()),
-            realm.clone(),
+            other_realm.clone(),
         )
         .await?;
         let initial = ObservedRail {
@@ -2321,41 +2260,34 @@ impl Probe {
             .flat_map(|entry| entry.committed_events.iter().flatten())
             .filter(|row| row.commit().stream_ref == stream)
             .collect::<Vec<_>>();
-        ensure!(
-            rows.len() == 1
-                && rows[0].commit().stream_position == 0
-                && rows[0].commit().previous_commit_ref.is_none(),
-            "fresh Circle baseline did not carry its independent position-zero Commit"
-        );
-        let first = rows[0].commit().clone();
+        ensure!(rows.iter().any(|row| row.commit().stream_position == 0 && row.commit().previous_commit_ref.is_none()), "independent Realm did not open at position zero");
+        let first = rows.iter().map(|row| row.commit()).max_by_key(|row| row.stream_position).context("accepted Realm bootstrap head")?.clone();
         let before = state(&host)?;
         let first_head = serde_json::to_value(arkret_wire::CommitStreamHead {
             stream_ref: stream.clone(),
-            stream_position: 0,
+            stream_position: first.stream_position,
             commit_id: first.commit_id.clone(),
         })?;
         ensure!(
             before["verified_commit_stream_cursors"][&key] == first_head
                 && before["verified_commit_stream_anchors"][&key] == serde_json::to_value(&first)?,
-            "Circle baseline was not verified and durably anchored by the Account driver"
+            "second Realm baseline was not verified and durably anchored by the Account driver"
         );
         let parent = before["verified_commit_stream_cursors"][&parent_key].clone();
         ensure!(
             parent["stream_position"]
                 .as_u64()
                 .is_some_and(|position| position > 1),
-            "Circle independence requires a distinct already advanced Realm head"
+            "second Realm independence requires a distinct already advanced Realm head"
         );
         let old_cursor = host
             .state_store()
             .sync_cursor()
-            .context("Circle baseline checkpoint")?;
+            .context("second Realm baseline checkpoint")?;
         drop(batches);
-        let strand = circle_event(&controller.client, realm.as_str(), &circle,
-            arkret_wire::EventKind::StrandCreate,
-            serde_json::json!({"object":{"schema":"ak.schema.strand.v1", "realm_id":realm,
-                "scope_circle_id":circle, "tracks":{"discussion":{"is_primary":true,"profile":"discussion"}},
-                "metadata":{"title":"Independent Circle tail"}, "state":"active", "created_by":controller.actor}})).await?;
+        let strand = controller.client.author_event(other_realm.as_str(), arkret_wire::EventKind::StrandCreate.as_str(),
+            serde_json::json!({"object":{"schema":"ak.schema.strand.v1", "realm_id":other_realm, "tracks":{"discussion":{"is_primary":true,"profile":"discussion"}},
+                "metadata":{"title":"Independent second Realm tail"}, "state":"active", "created_by":controller.actor}})).await?;
         let commit = submit_and_expect_commit(
             &controller.client,
             &controller.account,
@@ -2365,9 +2297,9 @@ impl Probe {
         .await?;
         ensure!(
             commit.stream_ref == stream
-                && commit.stream_position == 1
+                && commit.stream_position == first.stream_position + 1
                 && commit.previous_commit_ref.as_ref() == Some(&first.commit_id),
-            "accepted Circle successor borrowed a sibling stream predecessor or position"
+            "accepted second Realm successor borrowed a sibling stream predecessor or position"
         );
         let dependency_reads = self
             .scan_relay
@@ -2400,12 +2332,12 @@ impl Probe {
                 .flat_map(|realms| realms.entries.values())
                 .flat_map(|entry| entry.committed_events.iter().flatten())
                 .any(|row| row.commit() == &commit && row.reducer_input() == Some(&strand)),
-            "actual Account incremental omitted the exact accepted Circle original"
+            "actual Account incremental omitted the exact accepted second Realm original"
         );
         drop(batches);
         let head = serde_json::to_value(arkret_wire::CommitStreamHead {
             stream_ref: stream.clone(),
-            stream_position: 1,
+            stream_position: commit.stream_position,
             commit_id: commit.commit_id.clone(),
         })?;
         let anchor = serde_json::to_value(&commit)?;
@@ -2413,35 +2345,35 @@ impl Probe {
         ensure!(
             after["verified_commit_stream_cursors"][&key] == head
                 && after["verified_commit_stream_anchors"][&key] == anchor,
-            "Circle delta advanced without its exact verified head and signed original"
+            "second Realm delta advanced without its exact verified head and signed original"
         );
         ensure!(
             after["verified_commit_stream_cursors"][&parent_key] == parent
                 && after["verified_commit_stream_anchors"][&parent_key]
                     == before["verified_commit_stream_anchors"][&parent_key],
-            "Circle-only advancement reset or advanced the parent Realm stream"
+            "second Realm-only advancement reset or advanced the parent Realm stream"
         );
         let cut = inkson::conformance::retained_realm_current(
             &host.state_store(),
             &controller.account,
-            realm,
+            stream.realm_id(),
         )
         .await?;
         ensure!(
             cut["entries"]
                 .as_array()
-                .context("Circle current rows")?
+                .context("second Realm current rows")?
                 .iter()
                 .any(|row| row["revision"]["commit_id"] == commit.commit_id.as_str()),
-            "durable typed current omitted the accepted Circle successor"
+            "durable typed current omitted the accepted second Realm successor"
         );
         let cursor = host
             .state_store()
             .sync_cursor()
-            .context("Circle successor checkpoint")?;
+            .context("second Realm successor checkpoint")?;
         ensure!(
             cursor != old_cursor,
-            "Circle successor advanced no durable Account cursor"
+            "second Realm successor advanced no durable Account cursor"
         );
         drop(host);
         let reopened = inkson::LocalStateStore::with_path(path.clone());
@@ -2450,17 +2382,17 @@ impl Probe {
                 && inkson::conformance::retained_realm_current(
                     &reopened,
                     &controller.account,
-                    realm
+                    stream.realm_id()
                 )
                 .await?
                     == cut,
-            "Circle current and Account checkpoint changed across reopen"
+            "second Realm current and Account checkpoint changed across reopen"
         );
-        let evidence = self.directory.path().join("expected-circle-cut.json");
+        let evidence = self.directory.path().join("expected-second-realm-cut.json");
         std::fs::write(
             &evidence,
             serde_json::to_vec(&serde_json::json!({
-                "account":controller.account, "realm":realm, "cut":cut, "cursor":cursor,
+                "account":controller.account, "realm":other_realm, "cut":cut, "cursor":cursor,
                 "stream_key":key, "head":head, "anchor":anchor,
                 "stream_heads":after["verified_commit_stream_cursors"],
                 "stream_anchors":after["verified_commit_stream_anchors"]
@@ -2469,46 +2401,45 @@ impl Probe {
         let output = readback::output(&self.reader, &path, &evidence)?;
         ensure!(
             output.status.success(),
-            "fresh-process Circle cut readback failed: {}",
+            "fresh-process second Realm cut readback failed: {}",
             String::from_utf8_lossy(&output.stderr)
         );
         self.results.borrow_mut().push(super::CaseExecutionResult {
-            case_id: CIRCLE_TAIL_CASE.into(),
+            case_id: SECOND_REALM_TAIL_CASE.into(),
             assertions: 10,
         });
-        self.circle_gap(
+        self.second_realm_gap(
             controller,
             realm,
-            &circle,
+            &other_realm,
             &stream,
             path.clone(),
             database_url,
         )
         .await?;
-        self.circle_gap_recovery(controller, realm, &circle, &stream, &path)
+        self.second_realm_gap_recovery(controller, realm, &other_realm, &stream, &path)
             .await?;
         self.readable_row_gap(controller, realm, database_url, None)
             .await?;
         Ok(())
     }
 
-    async fn circle_gap(
+    async fn second_realm_gap(
         &self,
         controller: &Member,
         realm: &arkret_wire::RealmId,
-        circle: &arkret_wire::CircleId,
+        other_realm: &arkret_wire::RealmId,
         stream: &arkret_wire::CommitStreamRef,
         path: std::path::PathBuf,
         database_url: &str,
     ) -> Result<()> {
-        use cotest::scenarios::circle_poll_scope_live::circle_event;
         use cotest::scenarios::human_device_producer_live::submit_and_expect_commit;
         let host = NativeAccountHost::new_for_realm(
             controller.client.sdk(),
             controller.account.clone(),
             controller.device.clone(),
             inkson::LocalStateStore::with_path(path.clone()),
-            realm.clone(),
+            other_realm.clone(),
         )
         .await?;
         let before = state(&host)?;
@@ -2518,10 +2449,8 @@ impl Probe {
             .context("gap prior cursor")?;
         let mut commits = Vec::new();
         for title in ["Gap predecessor", "Gap successor"] {
-            let event = circle_event(&controller.client, realm.as_str(), circle,
-                arkret_wire::EventKind::StrandCreate,
-                serde_json::json!({"object":{"schema":"ak.schema.strand.v1", "realm_id":realm,
-                    "scope_circle_id":circle, "tracks":{"discussion":{"is_primary":true,"profile":"discussion"}},
+            let event = controller.client.author_event(other_realm.as_str(), arkret_wire::EventKind::StrandCreate.as_str(),
+                serde_json::json!({"object":{"schema":"ak.schema.strand.v1", "realm_id":other_realm, "tracks":{"discussion":{"is_primary":true,"profile":"discussion"}},
                     "metadata":{"title":title}, "state":"active", "created_by":controller.actor}})).await?;
             commits.push(
                 submit_and_expect_commit(
@@ -2535,20 +2464,13 @@ impl Probe {
         }
         ensure!(
             commits[0].stream_ref == *stream
-                && commits[0].stream_position == 2
+                && commits[0].stream_position.checked_sub(1) == before["verified_commit_stream_cursors"][serde_json::to_string(stream)?]["stream_position"].as_u64()
                 && commits[1].stream_ref == *stream
-                && commits[1].stream_position == 3
+                && commits[1].stream_position == commits[0].stream_position + 1
                 && commits[1].previous_commit_ref.as_ref() == Some(&commits[0].commit_id),
             "gap setup lacks an authentic accepted continuous successor pair"
         );
-        cotest::scenarios::circle_poll_scope_live::circle_create(
-            &controller.client,
-            realm.as_str(),
-            &controller.actor,
-            "Healthy sibling",
-            "Sibling",
-        )
-        .await?;
+        controller.client.create_strand(realm.as_str(), "Healthy sibling").await?;
         let http = controller.client.sdk();
         http.send_device_messages(
             "sync-gap-retained-ack",
@@ -2610,14 +2532,14 @@ impl Probe {
         let key = serde_json::to_string(stream)?;
         let head = serde_json::to_value(arkret_wire::CommitStreamHead {
             stream_ref: stream.clone(),
-            stream_position: 3,
+            stream_position: commits[1].stream_position,
             commit_id: commits[1].commit_id.clone(),
         })?;
         let anchor = serde_json::to_value(&commits[1])?;
         ensure!(
             after["verified_commit_stream_cursors"][&key] == head
                 && after["verified_commit_stream_anchors"][&key] == anchor,
-            "recovery failed to install the authentic repaired Circle tail"
+            "recovery failed to install the authentic repaired second Realm tail"
         );
         for (sibling, old) in before["verified_commit_stream_cursors"]
             .as_object()
@@ -2643,7 +2565,7 @@ impl Probe {
         let cut = inkson::conformance::retained_realm_current(
             &host.state_store(),
             &controller.account,
-            realm,
+            stream.realm_id(),
         )
         .await?;
         ensure!(
@@ -2659,7 +2581,7 @@ impl Probe {
         std::fs::write(
             &expected,
             serde_json::to_vec(&serde_json::json!({
-            "account":controller.account, "realm":realm, "cut":cut, "cursor":cursor,
+            "account":controller.account, "realm":other_realm, "cut":cut, "cursor":cursor,
             "stream_key":key, "head":head, "anchor":anchor,
             "stream_heads":after["verified_commit_stream_cursors"],
             "stream_anchors":after["verified_commit_stream_anchors"] }))?,
@@ -2679,29 +2601,28 @@ impl Probe {
         );
         Ok(())
     }
-    async fn circle_gap_recovery(
+    async fn second_realm_gap_recovery(
         &self,
         controller: &Member,
         realm: &arkret_wire::RealmId,
-        circle: &arkret_wire::CircleId,
+        other_realm: &arkret_wire::RealmId,
         stream: &arkret_wire::CommitStreamRef,
         path: &std::path::Path,
     ) -> Result<()> {
-        use cotest::scenarios::circle_poll_scope_live::{circle_create, circle_event};
         use cotest::scenarios::human_device_producer_live::submit_and_expect_commit;
         let host = NativeAccountHost::new_for_realm(
             controller.client.sdk(),
             controller.account.clone(),
             controller.device.clone(),
             inkson::LocalStateStore::with_path(path),
-            realm.clone(),
+            other_realm.clone(),
         )
         .await?;
         let before = state(&host)?;
         let cut = inkson::conformance::retained_realm_current(
             &host.state_store(),
             &controller.account,
-            realm,
+            stream.realm_id(),
         )
         .await?;
         let cursor = host.state_store().sync_cursor().context("pre-gap cursor")?;
@@ -2710,11 +2631,9 @@ impl Probe {
             realm_id: realm.clone(),
         };
         let parent_key = serde_json::to_string(&parent_stream)?;
-        let strand = circle_event(&controller.client, realm.as_str(), circle,
-            arkret_wire::EventKind::StrandCreate,
-            serde_json::json!({"object":{"schema":"ak.schema.strand.v1", "realm_id":realm,
-                "scope_circle_id":circle, "tracks":{"discussion":{"is_primary":true,"profile":"discussion"}},
-                "metadata":{"title":"Circle gap recovery"}, "state":"active", "created_by":controller.actor}})).await?;
+        let strand = controller.client.author_event(other_realm.as_str(), arkret_wire::EventKind::StrandCreate.as_str(),
+            serde_json::json!({"object":{"schema":"ak.schema.strand.v1", "realm_id":other_realm, "tracks":{"discussion":{"is_primary":true,"profile":"discussion"}},
+                "metadata":{"title":"second Realm gap recovery"}, "state":"active", "created_by":controller.actor}})).await?;
         let commit = submit_and_expect_commit(
             &controller.client,
             &controller.account,
@@ -2722,15 +2641,8 @@ impl Probe {
             &strand,
         )
         .await?;
-        // This accepted Circle creation advances only its parent Realm stream.
-        circle_create(
-            &controller.client,
-            realm.as_str(),
-            &controller.actor,
-            "Healthy sibling during gap",
-            "Healthy sibling",
-        )
-        .await?;
+        // This accepted second Realm creation advances only its parent Realm stream.
+        controller.client.create_strand(realm.as_str(), "Healthy sibling during gap").await?;
         let missing = ObservedRail {
             http: controller.client.sdk(),
             missing: Some(strand.event_id.clone()),
@@ -2740,10 +2652,10 @@ impl Probe {
         ensure!(
             matches!(&refused, Err(garth::Error::StreamTailIncomplete { stream_ref })
                 if stream_ref == stream),
-            "a missing Circle window crossed the Account checkpoint"
+            "a missing second Realm window crossed the Account checkpoint"
         );
         let batches = missing.observed.lock().unwrap().clone();
-        ensure!(batches.len() == 4, "Circle gap retries were not bounded");
+        ensure!(batches.len() == 4, "second Realm gap retries were not bounded");
         let parent_commit = batches
             .iter()
             .flat_map(|batch| &batch.frames)
@@ -2768,7 +2680,7 @@ impl Probe {
         ensure!(
             partial["verified_commit_stream_anchors"][&parent_key]
                 == serde_json::to_value(&parent_commit)?,
-            "missing Circle window blocked its healthy Realm sibling: {refused:?}"
+            "missing second Realm window blocked its healthy Realm sibling: {refused:?}"
         );
         ensure!(
             partial["verified_commit_stream_cursors"][&key]
@@ -2779,11 +2691,11 @@ impl Probe {
                 && inkson::conformance::retained_realm_current(
                     &host.state_store(),
                     &controller.account,
-                    realm
+                    stream.realm_id()
                 )
                 .await?
                     == cut,
-            "incomplete Circle changed its head, current cut or Account cursor"
+            "incomplete second Realm changed its head, current cut or Account cursor"
         );
         let mut forged_windows = 0;
         for window in forged
@@ -2813,11 +2725,11 @@ impl Probe {
         let evidence = self
             .directory
             .path()
-            .join("expected-circle-gap-held-cut.json");
+            .join("expected-second-realm-gap-held-cut.json");
         std::fs::write(
             &evidence,
             serde_json::to_vec(&serde_json::json!({
-                "account":controller.account, "realm":realm, "cut":cut, "cursor":cursor,
+                "account":controller.account, "realm":other_realm, "cut":cut, "cursor":cursor,
                 "stream_key":key, "head":before["verified_commit_stream_cursors"][&key],
                 "anchor":before["verified_commit_stream_anchors"][&key],
                 "stream_heads":partial["verified_commit_stream_cursors"],
@@ -2840,7 +2752,7 @@ impl Probe {
         let recovered_cut = inkson::conformance::retained_realm_current(
             &host.state_store(),
             &controller.account,
-            realm,
+            stream.realm_id(),
         )
         .await?;
         let recovered_cursor = host
@@ -2855,13 +2767,13 @@ impl Probe {
                     .context("recovered current rows")?
                     .iter()
                     .any(|row| row["revision"]["commit_id"] == commit.commit_id.as_str()),
-            "fresh snapshot and tail did not recover the held Circle cut"
+            "fresh snapshot and tail did not recover the held second Realm cut"
         );
         drop(host);
         std::fs::write(
             &evidence,
             serde_json::to_vec(&serde_json::json!({
-                "account":controller.account, "realm":realm, "cut":recovered_cut, "cursor":recovered_cursor,
+                "account":controller.account, "realm":other_realm, "cut":recovered_cut, "cursor":recovered_cursor,
                 "stream_key":key, "head":after["verified_commit_stream_cursors"][&key],
                 "anchor":after["verified_commit_stream_anchors"][&key],
                 "stream_heads":after["verified_commit_stream_cursors"],
@@ -2871,13 +2783,13 @@ impl Probe {
         let output = readback::output(&self.reader, path, &evidence)?;
         ensure!(
             output.status.success(),
-            "recovered Circle cut failed new-process readback: {}",
+            "recovered second Realm cut failed new-process readback: {}",
             String::from_utf8_lossy(&output.stderr)
         );
         // A malformed window regression is not the canonical position-row jump.
         // Keep the existing sixteen-case claim until that distinct input is run.
         println!(
-            "CIRCLE_GAP_RECOVERY: healthy history durable; incomplete cut held; repaired cut durable"
+            "REALM_GAP_RECOVERY: healthy history durable; incomplete cut held; repaired cut durable"
         );
         Ok(())
     }
@@ -2906,28 +2818,28 @@ pub async fn run_sync_production_cases(
             && gap_cases[0]["commits"][1]["stream_position"] == 2,
         "canonical unexplained stream gap or recovery expectations drifted"
     );
-    let circle_cases = fixture["stream_tails"]
+    let second_realm_cases = fixture["stream_tails"]
         .as_array()
-        .context("Circle tail fixture")?
+        .context("second Realm tail fixture")?
         .iter()
-        .filter(|case| case["name"] == CIRCLE_TAIL_CASE)
+        .filter(|case| case["name"] == SECOND_REALM_TAIL_CASE)
         .collect::<Vec<_>>();
     ensure!(
-        circle_cases.len() == 1
-            && circle_cases[0]["expected"] == "accepted"
-            && circle_cases[0]["stream_ref"]["kind"] == "circle",
-        "Circle independent-tail fixture identity or verdict drifted"
+        second_realm_cases.len() == 1
+            && second_realm_cases[0]["expected"] == "accepted"
+            && second_realm_cases[0]["stream_ref"]["kind"] == "realm",
+        "second Realm independent-tail fixture identity or verdict drifted"
     );
-    let commits = circle_cases[0]["commits"]
+    let commits = second_realm_cases[0]["commits"]
         .as_array()
-        .context("Circle fixture commits")?;
+        .context("second Realm fixture commits")?;
     ensure!(
         commits.len() == 2
             && commits[0]["stream_position"] == 0
             && commits[0]["previous_commit_ref"].is_null()
             && commits[1]["stream_position"] == 1
             && commits[1]["previous_commit_ref"] == commits[0]["commit_id"],
-        "Circle fixture no longer declares the independent continuous zero/one tail"
+        "second Realm fixture no longer declares the independent continuous zero/one tail"
     );
     let ordering = fixture["checkpoint_ordering"]
         .as_array()
@@ -3144,20 +3056,20 @@ pub async fn run_sync_production_cases(
             );
         }
     }
-    let missing_circle = fixture["reconnect"]
+    let missing_realm = fixture["reconnect"]
         .as_array()
         .context("reconnect cases")?
         .iter()
-        .filter(|case| case["name"] == MISSING_CIRCLE_CASE)
+        .filter(|case| case["name"] == MISSING_REALM_CASE)
         .collect::<Vec<_>>();
     ensure!(
-        missing_circle.len() == 1
-            && missing_circle[0]["expected"] == "resume"
-            && missing_circle[0]["affected_stream_ref"]["kind"] == "circle"
-            && missing_circle[0]["recovered_streams"] == serde_json::json!(["circle"])
-            && missing_circle[0]["other_streams_reset"] == false
-            && missing_circle[0]["to_device_acks_reset"] == false,
-        "canonical Circle recovery contract drifted"
+        missing_realm.len() == 1
+            && missing_realm[0]["expected"] == "resume"
+            && missing_realm[0]["affected_stream_ref"]["kind"] == "realm"
+            && missing_realm[0]["recovered_streams"] == serde_json::json!(["realm"])
+            && missing_realm[0]["other_streams_reset"] == false
+            && missing_realm[0]["to_device_acks_reset"] == false,
+        "canonical second Realm recovery contract drifted"
     );
     let probe = Probe {
         scan_relay: Default::default(),
@@ -3182,10 +3094,10 @@ pub async fn run_sync_production_cases(
         .chain(ACK_CASES)
         .chain(QUEUE_CASES)
         .chain(std::iter::once(BASELINE_CASE))
-        .chain(std::iter::once(CIRCLE_TAIL_CASE))
+        .chain(std::iter::once(SECOND_REALM_TAIL_CASE))
         .chain(std::iter::once(STREAM_GAP_CASE))
         .chain(std::iter::once(REVISION_STALE_CASE))
-        .chain(std::iter::once(MISSING_CIRCLE_CASE))
+        .chain(std::iter::once(MISSING_REALM_CASE))
         .chain(std::iter::once(private_reply::CASE))
         .chain(ORDERING_CASES)
         .collect::<std::collections::BTreeSet<_>>();

@@ -489,9 +489,7 @@ pub async fn limited_window_strand_tail_verifies_with_same_cut_current_through_i
         source_stream_ref, ..
     }) = forged_entries.first_mut()
     {
-        *source_stream_ref = arkret_wire::CommitStreamRef::Circle {
-            realm_id: typed_realm.clone(),
-            circle_id: arkret_wire::CircleId::from_event_id(&arkret_wire::EventId::from_digest(
+        *source_stream_ref = arkret_wire::CommitStreamRef::Realm { realm_id: arkret_wire::RealmId::from_event_id(&arkret_wire::EventId::from_digest(
                 arkret_canonical::DigestSuite::Sha256,
                 [0x6f; 32],
             )),

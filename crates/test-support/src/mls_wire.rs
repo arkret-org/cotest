@@ -132,7 +132,7 @@ pub fn mls_genesis(input: Value) -> Result<Value> {
     });
     ensure!(
         scope.realm_id_opt() == Some(&input.realm_id)
-            && matches!(scope, ScopeRef::Realm { .. } | ScopeRef::Circle { .. }),
+            && matches!(scope, ScopeRef::Realm { .. }),
         "MLS Genesis scope must belong to the requested Realm"
     );
     let binding = MlsGovernanceBindingPayload::new(scope.clone(), None, 0, 0, 0)?;
@@ -216,7 +216,7 @@ pub fn mls_keypackage_claim_request(input: Value) -> Result<Value> {
     });
     ensure!(
         scope.realm_id_opt() == Some(&input.realm_id)
-            && matches!(scope, ScopeRef::Realm { .. } | ScopeRef::Circle { .. }),
+            && matches!(scope, ScopeRef::Realm { .. }),
         "MLS claim scope must belong to the requested Realm"
     );
     let signed_at = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
@@ -533,7 +533,6 @@ struct OpenSignalsInput {
     recipient_account_id: AccountId,
     group_state_ref: EventId,
     authority_commit_id: arkret_wire::RealmCommitId,
-    parent_realm_authority_commit_id: Option<arkret_wire::RealmCommitId>,
     frames: Vec<arkret_models_collaboration::SignalStreamFrame>,
 }
 
@@ -556,10 +555,6 @@ pub fn mls_open_signals(input: Value) -> Result<Value> {
         ensure!(
             delivery_authority.recipient_account_id == input.recipient_account_id,
             "Signal recipient mismatch"
-        );
-        ensure!(
-            envelope.parent_realm_authority_commit_id == input.parent_realm_authority_commit_id,
-            "Signal parent cut mismatch"
         );
         let raw: [u8; 32] = decode_b64(delivery_authority.key.public_key_base64url.as_str())?
             .try_into()
@@ -717,15 +712,7 @@ mod scope_tests {
         RealmId::new("ak:realm:ASZ1iAvlGxgLC_-P6WHoR9vfijpaxbI5hoSwBx8zWTcT").unwrap()
     }
 
-    fn circle_scope() -> ScopeRef {
-        ScopeRef::Circle {
-            realm_id: realm(),
-            circle_id: arkret_wire::CircleId::new(
-                "ak:circle:ASZ1iAvlGxgLC_-P6WHoR9vfijpaxbI5hoSwBx8zWTcT",
-            )
-            .unwrap(),
-        }
-    }
+    fn scope() -> ScopeRef { ScopeRef::Realm { realm_id: realm() } }
 
     fn endpoint() -> Value {
         json!({
@@ -740,18 +727,18 @@ mod scope_tests {
     }
 
     #[test]
-    fn circle_genesis_is_real_scope_bound_mls_not_parent_realm_state() {
+    fn genesis_binds_mls_to_the_exact_realm() {
         let authorization = EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [3; 32]);
         let input = json!({
-            "endpoint": endpoint(), "realm_id": realm(), "scope_ref": circle_scope(),
+            "endpoint": endpoint(), "realm_id": realm(), "scope_ref": scope(),
             "device_authorize_event_id": authorization,
         });
         let output = mls_genesis(input.clone()).unwrap();
         let group = decode_group(output["group_state"].as_str().unwrap()).unwrap();
-        assert_eq!(group.scope(), &circle_scope());
+        assert_eq!(group.scope(), &scope());
         assert_eq!(
             group.group_id(),
-            circle_scope().canonical_mls_group_id().unwrap()
+            scope().canonical_mls_group_id().unwrap()
         );
         assert_eq!(group.epoch(), 0);
         assert_eq!(group.verified_leaf_bindings().unwrap().len(), 1);
@@ -766,7 +753,9 @@ mod scope_tests {
         );
 
         let mut parent = input.clone();
-        parent.as_object_mut().unwrap().remove("scope_ref");
+        let foreign = arkret_wire::RealmId::new("ak:realm:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19").unwrap();
+        parent["scope_ref"] = json!({"kind":"realm","realm_id":foreign});
+        parent["realm_id"] = json!(foreign);
         let parent = mls_genesis(parent).unwrap();
         let parent = decode_group(parent["group_state"].as_str().unwrap()).unwrap();
         assert_ne!(parent.group_id(), group.group_id());
@@ -777,7 +766,7 @@ mod scope_tests {
     }
 
     #[test]
-    fn circle_claim_signs_exact_group_and_rejects_foreign_scope() {
+    fn realm_claim_signs_exact_group_and_rejects_foreign_scope() {
         use ed25519_dalek::Verifier as _;
 
         let endpoint = endpoint();
@@ -795,17 +784,17 @@ mod scope_tests {
                 DidCoreId::new("ak:did_core:web:station.example").unwrap(),
             ),
             "target_device_id": "ak:device:01904100-0000-7000-8000-00000000000e",
-            "realm_id": realm(), "scope_ref": circle_scope(),
+            "realm_id": realm(), "scope_ref": scope(),
             "source_id": "ak:did_core:web:station.example",
             "destination_id": "ak:did_core:web:station.example",
             "claim_request_id": encode_b64(&[4; 16]), "lifetime_seconds": 240,
         });
         let request: KeyPackagesClaimRequestBody =
             serde_json::from_value(mls_keypackage_claim_request(input.clone()).unwrap()).unwrap();
-        assert_eq!(request.effective_scope, circle_scope());
+        assert_eq!(request.effective_scope, scope());
         assert_eq!(
             request.mls_group_id,
-            circle_scope().canonical_mls_group_id().unwrap()
+            scope().canonical_mls_group_id().unwrap()
         );
         let bytes = arkret_models_crypto::keypackage_claim_authorization_signing_bytes(
             &request.unsigned_request(),
@@ -834,21 +823,20 @@ mod scope_tests {
     }
 
     #[test]
-    fn circle_signal_uses_real_aead_and_frozen_dual_cuts() {
+    fn signal_authenticates_the_frozen_realm_cut() {
         let endpoint = endpoint();
         let authorization = EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [3; 32]);
         let genesis = mls_genesis(json!({
-            "endpoint": endpoint, "realm_id": realm(), "scope_ref": circle_scope(),
+            "endpoint": endpoint, "realm_id": realm(), "scope_ref": scope(),
             "device_authorize_event_id": authorization,
         }))
         .unwrap();
         let state_ref = EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [4; 32]);
         let scope_cut = arkret_wire::RealmCommitId::from_digest([5; 32]);
-        let parent_cut = arkret_wire::RealmCommitId::from_digest([6; 32]);
         let mut envelope: arkret_wire::SignalEnvelope = serde_json::from_value(json!({
-            "realm_id": realm(), "scope_ref": circle_scope(),
+            "realm_id": realm(), "scope_ref": scope(),
             "sender_actor_id": endpoint["actor_id"], "sender_device_id": endpoint["device_id"],
-            "authority_commit_id": scope_cut, "parent_realm_authority_commit_id": parent_cut,
+            "authority_commit_id": scope_cut,
             "signal_class": "session", "sent_at": "2026-10-05T00:00:00.000Z",
             "expires_at": "2026-10-05T00:00:25.000Z",
             "encrypted_payload": {
@@ -892,7 +880,7 @@ mod scope_tests {
         };
         let mut input = json!({"group_state": genesis["group_state"], "recipient_account_id": recipient,
             "group_state_ref": state_ref, "authority_commit_id": scope_cut,
-            "parent_realm_authority_commit_id": parent_cut, "frames": [frame(&envelope)]});
+            "frames": [frame(&envelope)]});
         assert_eq!(
             mls_open_signals(input.clone()).unwrap()["plaintexts"],
             json!([plaintext])
@@ -900,11 +888,9 @@ mod scope_tests {
         input["frames"] = json!([frame(&envelope), frame(&envelope)]);
         assert!(mls_open_signals(input.clone()).is_err());
         // A correctly re-signed mutation still fails AEAD, proving the AAD gate.
-        envelope.parent_realm_authority_commit_id =
-            Some(arkret_wire::RealmCommitId::from_digest([9; 32]));
+        envelope.authority_commit_id = arkret_wire::RealmCommitId::from_digest([9; 32]);
         sign(&mut envelope);
-        input["parent_realm_authority_commit_id"] =
-            json!(envelope.parent_realm_authority_commit_id);
+        input["authority_commit_id"] = json!(envelope.authority_commit_id);
         input["frames"] = json!([frame(&envelope)]);
         assert!(mls_open_signals(input).is_err());
         let next = mls_encrypt_signal(json!({"group_state": sealed["group_state"],

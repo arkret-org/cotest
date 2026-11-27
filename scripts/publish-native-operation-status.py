@@ -40,7 +40,6 @@ REQUIRED = (
     "peer_contacts_retain_two_native_authorities_and_nonempty_originals",
     "call_invitation_retains_real_recipient_and_fresh_holder_verdict",
     "account_erasure_retains_native_terminal_intent_and_physical_receipt",
-    "circle_rotation_retains_actual_update_paths_welcome_and_original_replays",
     "mimi_proxy_download_retains_public_object_current_policy_and_provider_originals",
     "peer_consent_retains_real_hosting_current_proxy_and_worker_effects",
 )

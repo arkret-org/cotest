@@ -1115,16 +1115,15 @@ fn welcome_add_commit_and_claim_record_binding_case(case: &Value, tally: &mut Ta
         0x71,
         &loser_group,
     )?;
-    let circle_scope = ScopeRef::Circle {
-        realm_id: arkret_wire::RealmId::new(FIXTURE_REALM.to_owned())?,
-        circle_id: arkret_wire::CircleId::from_event_id(&EventId::from_digest(
+    let other_scope = ScopeRef::Realm {
+        realm_id: arkret_wire::RealmId::from_event_id(&EventId::from_digest(
             arkret::DigestSuite::Sha256,
             [0x54; 32],
         )),
     };
     let other_lineage = accepted_commit(
         &scope,
-        &circle_scope,
+        &other_scope,
         &creator.actor,
         &genesis,
         &winning_add.commit,

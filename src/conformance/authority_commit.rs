@@ -11,14 +11,14 @@
 use anyhow::{Result, anyhow, bail, ensure};
 use arkret_canonical::DigestSuite;
 use arkret_identifiers::{
-    CircleId, DidCoreId, EventId, KeypackageClaimId, MlsWelcomeDeliveryId, RealmAuthorityHandoffId,
+    DidCoreId, EventId, KeypackageClaimId, MlsWelcomeDeliveryId, RealmAuthorityHandoffId,
     RealmCommitId, RealmId, RealmSnapshotId, SidecarId,
 };
 use arkret_models_collaboration::events_payloads::{
     RealmCreatePayload, RealmGenesis, RealmPurpose,
 };
-use arkret_models_collaboration::governance::circle::{
-    CircleScopeError, validate_mls_activation_is_irreversible, validate_scope_mls_activation,
+use arkret_models_collaboration::governance::mls_activation::{
+    MlsActivationError, validate_mls_activation_is_irreversible, validate_scope_mls_activation,
 };
 use arkret_state::{
     AppendOutcome, AuthorityCommitStore, CommitLogError, MemoryAuthorityCommitStore,
@@ -124,7 +124,7 @@ fn parse_independent_streams(fixture: &Value) -> Result<Vec<DeclaredStream>> {
         .ok_or_else(|| anyhow!("independent_streams must be an array"))?;
     ensure!(
         declared.len() == 3,
-        "the fixture must declare a Realm, a Circle and a Sidecar stream"
+        "the fixture must declare two Realms and a Sidecar stream"
     );
 
     let mut streams = Vec::with_capacity(declared.len());
@@ -141,20 +141,6 @@ fn parse_independent_streams(fixture: &Value) -> Result<Vec<DeclaredStream>> {
                     realm_id: realm_id.clone(),
                 },
             ),
-            "circle" => {
-                let circle_id = CircleId::new(required_str(stream_value, "circle_id")?.to_owned())
-                    .map_err(|error| anyhow!("fixture circle_id is not typed: {error}"))?;
-                (
-                    CommitStreamRef::Circle {
-                        realm_id: realm_id.clone(),
-                        circle_id: circle_id.clone(),
-                    },
-                    ScopeRef::Circle {
-                        realm_id: realm_id.clone(),
-                        circle_id,
-                    },
-                )
-            }
             "sidecar" => {
                 let sidecar_id =
                     SidecarId::new(required_str(stream_value, "sidecar_id")?.to_owned())
@@ -239,15 +225,14 @@ fn verify_streams_have_no_global_position(streams: &[DeclaredStream]) -> Result<
         .map(|stream| stream.realm_id.as_str())
         .collect::<std::collections::BTreeSet<_>>();
     ensure!(
-        realm_ids.len() == 1,
-        "the fixture's independent streams must belong to one Realm"
+        realm_ids.len() == 2,
+        "the fixture's independent streams must cover two Realms"
     );
 
     let mut kinds = std::collections::BTreeSet::new();
     for stream in streams {
         kinds.insert(match stream.stream_ref {
             CommitStreamRef::Realm { .. } => "realm",
-            CommitStreamRef::Circle { .. } => "circle",
             CommitStreamRef::Sidecar { .. } => "sidecar",
             _ => bail!("the fixture declared an unknown commit stream kind"),
         });
@@ -260,8 +245,8 @@ fn verify_streams_have_no_global_position(streams: &[DeclaredStream]) -> Result<
         );
     }
     ensure!(
-        kinds.len() == 3,
-        "Realm, Circle and Sidecar must each own a separate stream"
+        kinds.len() == 2,
+        "Realm and Sidecar streams must both be present"
     );
 
     // A global sequence would make the three position-0 commits collide. Every
@@ -493,10 +478,10 @@ fn verify_cross_stream_predecessor_is_rejected(streams: &[DeclaredStream]) -> Re
         .iter()
         .find(|stream| matches!(stream.stream_ref, CommitStreamRef::Realm { .. }))
         .ok_or_else(|| anyhow!("the fixture must declare a Realm stream"))?;
-    let circle_stream = streams
+    let other_realm_stream = streams
         .iter()
-        .find(|stream| matches!(stream.stream_ref, CommitStreamRef::Circle { .. }))
-        .ok_or_else(|| anyhow!("the fixture must declare a Circle stream"))?;
+        .filter(|stream| matches!(stream.stream_ref, CommitStreamRef::Realm { .. })).nth(1)
+        .ok_or_else(|| anyhow!("the fixture must declare a second Realm stream"))?;
 
     let realm_event = producer_event(realm_stream, 121)?;
     let realm_commit = commit_for(
@@ -506,19 +491,19 @@ fn verify_cross_stream_predecessor_is_rejected(streams: &[DeclaredStream]) -> Re
         0,
         OLD_AUTHORITY_DID,
     )?;
-    let circle_event = producer_event(circle_stream, 122)?;
-    let mut circle_commit = commit_for(
-        circle_stream,
-        &circle_stream.commits[0],
-        &circle_event,
+    let other_event = producer_event(other_realm_stream, 122)?;
+    let mut other_commit = commit_for(
+        other_realm_stream,
+        &other_realm_stream.commits[0],
+        &other_event,
         0,
         OLD_AUTHORITY_DID,
     )?;
-    circle_commit.stream_position = 1;
-    circle_commit.previous_commit_ref = Some(realm_commit.commit_id.clone());
+    other_commit.stream_position = 1;
+    other_commit.previous_commit_ref = Some(realm_commit.commit_id.clone());
 
     ensure!(
-        circle_commit.validate_successor_of(&realm_commit).is_err(),
+        other_commit.validate_successor_of(&realm_commit).is_err(),
         "a predecessor in another independent stream must be rejected"
     );
 
@@ -528,7 +513,7 @@ fn verify_cross_stream_predecessor_is_rejected(streams: &[DeclaredStream]) -> Re
         .map_err(|error| anyhow!("realm genesis commit rejected: {error}"))?;
     ensure!(
         matches!(
-            store.append(&circle_event, circle_commit),
+            store.append(&other_event, other_commit),
             Err(CommitLogError::HeadConflict)
         ),
         "a cross-stream predecessor must not be appendable"
@@ -756,11 +741,13 @@ struct AuthorityFixture {
     streams: Vec<DeclaredStream>,
 }
 
-/// Re-root the declared streams at `realm_id`, keeping each Circle / Sidecar
+/// Re-root the declared streams at `realm_id`, keeping each Sidecar
 /// id and the declared commit chain intact.
 fn reroot_streams(streams: &[DeclaredStream], realm_id: &RealmId) -> Result<Vec<DeclaredStream>> {
+    let home = &streams.first().ok_or_else(|| anyhow!("fixture has no primary Realm"))?.realm_id;
     streams
         .iter()
+        .filter(|stream| &stream.realm_id == home)
         .map(|stream| {
             let (stream_ref, scope_ref) = match &stream.stream_ref {
                 CommitStreamRef::Realm { .. } => (
@@ -769,16 +756,6 @@ fn reroot_streams(streams: &[DeclaredStream], realm_id: &RealmId) -> Result<Vec<
                     },
                     ScopeRef::Realm {
                         realm_id: realm_id.clone(),
-                    },
-                ),
-                CommitStreamRef::Circle { circle_id, .. } => (
-                    CommitStreamRef::Circle {
-                        realm_id: realm_id.clone(),
-                        circle_id: circle_id.clone(),
-                    },
-                    ScopeRef::Circle {
-                        realm_id: realm_id.clone(),
-                        circle_id: circle_id.clone(),
                     },
                 ),
                 CommitStreamRef::Sidecar { sidecar_id, .. } => (
@@ -1342,22 +1319,22 @@ fn verify_mls_atomic_submission(fixture: &Value) -> Result<()> {
     );
 
     let streams = parse_independent_streams(fixture)?;
-    let circle_stream = streams
+    let other_realm_stream = streams
         .iter()
-        .find(|stream| matches!(stream.stream_ref, CommitStreamRef::Circle { .. }))
-        .ok_or_else(|| anyhow!("the fixture must declare a Circle stream"))?;
+        .filter(|stream| matches!(stream.stream_ref, CommitStreamRef::Realm { .. })).nth(1)
+        .ok_or_else(|| anyhow!("the fixture must declare a second Realm stream"))?;
 
     let commit_event = signed_event(arkret_wire::test_support::raw_event_for_actor_at(
         EventKind::MlsCommit.as_str(),
-        circle_stream.scope_ref.clone(),
+        other_realm_stream.scope_ref.clone(),
         producer_actor()?,
         json!({ "cotest_mls_commit": 1 }),
         fixed_time(80),
     )?)?;
 
     let welcomes = vec![
-        welcome_delivery(circle_stream, &commit_event, 1)?,
-        welcome_delivery(circle_stream, &commit_event, 2)?,
+        welcome_delivery(other_realm_stream, &commit_event, 1)?,
+        welcome_delivery(other_realm_stream, &commit_event, 2)?,
     ];
     let submission = MlsCommitSubmission {
         recovery_source: None,
@@ -1405,7 +1382,7 @@ fn verify_mls_atomic_submission(fixture: &Value) -> Result<()> {
         "a Welcome delivery needs its own producer signature context"
     );
 
-    verify_invalid_welcome_writes_nothing(circle_stream, &submission, &rebound)?;
+    verify_invalid_welcome_writes_nothing(other_realm_stream, &submission, &rebound)?;
     verify_welcome_carries_no_recipient_ack(&welcomes[0])?;
     verify_welcome_is_not_an_event(&welcomes[0])?;
     Ok(())
@@ -1586,7 +1563,7 @@ fn verify_mls_activation_is_irreversible() -> Result<()> {
     ensure!(
         matches!(
             plaintext_after_activation,
-            CircleScopeError::MlsActivationRequired
+            MlsActivationError::MlsActivationRequired
         ),
         "the rejection must be mls_activation_required"
     );
@@ -1607,7 +1584,7 @@ fn verify_mls_activation_is_irreversible() -> Result<()> {
             .err()
             .ok_or_else(|| anyhow!("an accepted activation must not be cleared or replaced"))?;
         ensure!(
-            matches!(error, CircleScopeError::MlsActivationIrreversible),
+            matches!(error, MlsActivationError::MlsActivationIrreversible),
             "the rejection must be mls_activation_irreversible"
         );
         ensure!(
@@ -1627,9 +1604,8 @@ fn verify_recovery_completion_is_two_consecutive_commits() -> Result<()> {
     let realm_stream = CommitStreamRef::Realm {
         realm_id: realm_id.clone(),
     };
-    let circle_stream = CommitStreamRef::Circle {
-        realm_id: realm_id.clone(),
-        circle_id: CircleId::from_event_id(&EventId::from_digest(DigestSuite::Sha256, [0x49; 32])),
+    let other_realm_stream = CommitStreamRef::Realm {
+        realm_id: RealmId::from_event_id(&EventId::from_digest(DigestSuite::Sha256, [0x49; 32])),
     };
 
     let reanchor = committed_ref(&realm_stream, 7, 0x50);
@@ -1650,12 +1626,12 @@ fn verify_recovery_completion_is_two_consecutive_commits() -> Result<()> {
         ),
         (
             reanchor.clone(),
-            committed_ref(&circle_stream, 8, 0x54),
+            committed_ref(&other_realm_stream, 8, 0x54),
             "the pair must live in one stream",
         ),
         (
-            committed_ref(&circle_stream, 7, 0x55),
-            committed_ref(&circle_stream, 8, 0x56),
+            committed_ref(&other_realm_stream, 7, 0x55),
+            committed_ref(&other_realm_stream, 8, 0x56),
             "recovery completes only in the PCR Realm stream",
         ),
     ];

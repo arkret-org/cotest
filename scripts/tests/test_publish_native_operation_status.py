@@ -110,7 +110,6 @@ class NativeOperationStatusTests(unittest.TestCase):
             "push_gateway": "push_gateway_retains_native_registration_receipt_and_provider_dispatch",
             "applet_managed_configuration": "applet_managed_configuration_retains_review_originals_and_native_route",
             "account_erasure_status": "account_erasure_retains_native_terminal_intent_and_physical_receipt",
-            "circle_rotation": "circle_rotation_retains_actual_update_paths_welcome_and_original_replays",
             "mimi_proxy_download": "mimi_proxy_download_retains_public_object_current_policy_and_provider_originals",
             "peer_consent": "peer_consent_retains_real_hosting_current_proxy_and_worker_effects",
         }

@@ -1,6 +1,6 @@
 import type { Page, Request, WebSocket } from "@playwright/test";
 
-type PublicScanCost = { realm: string; scope: "realm" | "circle" | "sidecar";
+type PublicScanCost = { realm: string; scope: "realm" | "sidecar";
   target: string; direction: "after" | "before"; position: string | null; limit: number };
 type CostPhase = "same-cut" | "ordinary-messages" | "real-lifecycle" | "board-switches";
 
@@ -10,7 +10,7 @@ function publicScanCost(request: Request): PublicScanCost | null {
   try {
     const body = request.postDataJSON();
     const scope = body?.stream_ref?.kind;
-    if (!["realm", "circle", "sidecar"].includes(scope)) return null;
+    if (!["realm",  "sidecar"].includes(scope)) return null;
     const realm = body.realm_id;
     const target = body.stream_ref[scope === "realm" ? "realm_id" : `${scope}_id`];
     if (typeof realm !== "string" || !/^ak:realm:[A-Za-z0-9_-]{40,64}$/.test(realm)

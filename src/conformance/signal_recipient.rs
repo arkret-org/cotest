@@ -341,14 +341,9 @@ async fn signal_peer_uncertain_http_outcome_is_not_retried() {
 }
 
 #[tokio::test]
-async fn signal_recipient_preserves_the_authenticated_circle_authority_basis() {
+async fn signal_recipient_preserves_the_authenticated_realm_authority_basis() {
     let mut signal = envelope().unwrap();
-    signal.scope_ref = arkret_wire::ScopeRef::Circle {
-        realm_id: signal.realm_id.clone(),
-        circle_id: arkret_wire::CircleId::from_event_id(&crate::fixture_event_id("signal-circle")),
-    };
-    signal.parent_realm_authority_commit_id =
-        Some(arkret_wire::RealmCommitId::from_digest([0x43; 32]));
+    signal.authority_commit_id = arkret_wire::RealmCommitId::from_digest([0x43; 32]);
     crate::harness::attach_signal_proof(&mut signal, &SigningKey::from_bytes(&ALICE_SEED));
     let authority = delivery_authority(
         &signal,
@@ -359,8 +354,7 @@ async fn signal_recipient_preserves_the_authenticated_circle_authority_basis() {
     let decryptor = ProfileDecryptor::presence(&signal, 1);
     let mut receiver = SignalReceiver::new();
     let mut tampered = signal.clone();
-    tampered.parent_realm_authority_commit_id =
-        Some(arkret_wire::RealmCommitId::from_digest([0x44; 32]));
+    tampered.authority_commit_id = arkret_wire::RealmCommitId::from_digest([0x44; 32]);
     assert!(
         receiver
             .receive(&tampered, &authority, &decryptor, signal.sent_at)
@@ -369,7 +363,6 @@ async fn signal_recipient_preserves_the_authenticated_circle_authority_basis() {
     );
     let SignalReceiveOutcome::Accepted {
         authority_commit_id,
-        parent_realm_authority_commit_id,
         domain,
         ..
     } = receiver
@@ -377,13 +370,9 @@ async fn signal_recipient_preserves_the_authenticated_circle_authority_basis() {
         .await
         .unwrap()
     else {
-        panic!("authenticated Circle Signal was not accepted");
+        panic!("authenticated Realm Signal was not accepted");
     };
     assert_eq!(authority_commit_id, signal.authority_commit_id);
-    assert_eq!(
-        parent_realm_authority_commit_id,
-        signal.parent_realm_authority_commit_id
-    );
     assert_eq!(domain.scope_ref, signal.scope_ref);
     assert_eq!(domain.sender_actor_id, signal.sender_actor_id);
 }
@@ -474,7 +463,7 @@ async fn signal_recipient_consumes_formal_dual_action_fixture_without_body_on_re
     };
     let material = SignalProductAuthority {
         authority_commit_id: signal.authority_commit_id.clone(),
-        parent_realm_authority_commit_id: None,
+
         current_realm_head: head.clone(),
         current_scope_head: head,
         sent_at: signal.sent_at,

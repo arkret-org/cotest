@@ -71,8 +71,6 @@ const TARGETS = [
   { file: "consent-operations.schema.json", pointer: "#/$defs/consent_current_read_request_body", typeName: "ConsentCurrentReadRequestBody" },
   { file: "consent-operations.schema.json", pointer: "#/$defs/consent_current_read_response_body", typeName: "ConsentCurrentReadResponseBody" },
   { file: "identity-resolution.schema.json", pointer: "#/$defs/public_principal_resolution", typeName: "PublicPrincipalResolution" },
-  { file: "circle-operations.schema.json", pointer: "#/$defs/circle_view", typeName: "CircleView" },
-  { file: "circle-operations.schema.json", pointer: "#/$defs/circle_membership_response_body", typeName: "CircleMembershipResponseBody" },
   { file: "contact-operations.schema.json", pointer: "#/$defs/contact_peer", typeName: "ContactPeer" },
   { file: "contact-operations.schema.json", pointer: "#/$defs/contact_view", typeName: "ContactView" },
   { file: "contact-operations.schema.json", pointer: "#/$defs/contact_request_request_body", typeName: "ContactRequestBody" },

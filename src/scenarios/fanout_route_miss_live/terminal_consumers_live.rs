@@ -7,7 +7,6 @@ use super::terminal_restart_live::{
 use super::*;
 use crate::harness::CanonicalJsonBody;
 use crate::scenarios::_helpers::acceptance_footprint::acceptance_rows;
-use crate::scenarios::circle_poll_scope_live::{circle_create, circle_event, join_circle};
 
 pub async fn run() -> Result<()> {
     use arkret_wire::{
@@ -199,24 +198,6 @@ pub async fn run() -> Result<()> {
         &placement,
     )
     .await?;
-    let circle = circle_create(
-        &fixture.alice,
-        &fixture.realm,
-        &actor,
-        "Terminal retained Circle",
-        "Terminal",
-    )
-    .await?;
-    join_circle(&fixture.alice, &fixture.realm, &circle, &actor).await?;
-    let live: Value = fixture
-        .alice
-        .get(&format!("/_arkret/self/circles/{circle}"))
-        .send()
-        .await?
-        .error_for_status()?
-        .json()
-        .await?;
-    ensure!(live["state"] == "active");
     let canonical = acceptance_rows(&source).await?;
     let (_, terminal) = tombstone(&fixture).await?;
     super::frozen_authority_live::settled(&source, &terminal, "delivered").await?;
@@ -263,8 +244,6 @@ pub async fn run() -> Result<()> {
     release_outbox_progress(source_outbox).await?;
     let after = acceptance_rows(&source).await?;
     for table in [
-        "circle_current_states",
-        "circle_member_state_current_states",
         "space_current_states",
         "space_parent_current_states",
         "strand_position_current_states",
@@ -279,51 +258,13 @@ pub async fn run() -> Result<()> {
         .server_mut(0)
         .restart_external_process()
         .await?;
-    let response = fixture
-        .alice
-        .get(&format!("/_arkret/self/circles/{circle}"))
-        .send()
-        .await?;
-    ensure!(response.status() == StatusCode::NOT_FOUND);
-    let restore = fixture
-        .alice
-        .author_event(
-            &fixture.realm,
-            EventKind::CircleRestore.as_str(),
-            json!({"target_ref":circle}),
-        )
-        .await?;
-    let source_outbox = hold_outbox_progress(&source).await?;
-    let stable = acceptance_rows(&source).await?;
-    let response = fixture
-        .alice
-        .post("/_arkret/self/events")
-        .canonical_json(&EventAdmissionSubmission::new(restore))?
-        .send()
-        .await?;
-    let status = response.status();
-    let problem: arkret_wire::Problem = response.json().await?;
-    ensure!(
-        status == StatusCode::CONFLICT && problem.problem_type.ends_with("failed_precondition"),
-        "terminal must precede unsupported Circle restore: {status} {problem:?}"
-    );
-    ensure_ordinary_refusal_rows(&stable, acceptance_rows(&source).await?, &fixture.alice)?;
-    let event = circle_event(&fixture.alice, &fixture.realm, &circle, EventKind::CircleMemberState,
-        json!({"circle_id":circle,"member_id":actor,"membership":"leave","expected_membership":"join"})).await?;
-    let stable = acceptance_rows(&source).await?;
-    let response = fixture
-        .alice
-        .post("/_arkret/self/events")
-        .canonical_json(&EventAdmissionSubmission::new(event))?
-        .send()
-        .await?;
-    ensure!(response.status() == StatusCode::CONFLICT);
-    let problem: arkret_wire::Problem = response.json().await?;
-    ensure!(problem.problem_type.ends_with("failed_precondition"));
-    ensure_ordinary_refusal_rows(&stable, acceptance_rows(&source).await?, &fixture.alice)?;
-    release_outbox_progress(source_outbox).await?;
+    for suffix in ["spaces", "strands"] {
+        let response: Value = fixture.alice.get(&format!("/_arkret/self/realms/{}/{suffix}?include_terminal=true", fixture.realm))
+            .send().await?.error_for_status()?.json().await?;
+        ensure!(response[suffix].as_array().context("navigation after restart")?.is_empty());
+    }
     println!(
-        "[terminal-consumers] controller_destroy_denied=1 signed_peer_destroy_denied=2 ordinary_vote_not_destructive_carrier=1 actual_space_placement=1 effective_circle_closed=1 canonical_children_unchanged=1 cold_restart_navigation_closed=1 ordinary_self_peer_denied=2"
+        "[terminal-consumers] controller_destroy_denied=1 signed_peer_destroy_denied=2 ordinary_vote_not_destructive_carrier=1 actual_space_placement=1 canonical_children_unchanged=1 cold_restart_navigation_closed=1 ordinary_self_peer_denied=2"
     );
     Ok(())
 }

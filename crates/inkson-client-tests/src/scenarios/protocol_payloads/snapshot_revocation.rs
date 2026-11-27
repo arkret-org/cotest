@@ -6,16 +6,16 @@ use std::sync::Mutex;
 use anyhow::{Context, Result, ensure};
 use arkret_wire::{
     ActorId, CommitStreamRef, CurrentSelector, CurrentState, Event, EventKind, RealmId,
-    RealmSnapshotPurpose, RealmStateSnapshot, StrandId,
+    RealmSnapshotPurpose, RealmStateSnapshot,
 };
 use cotest::harness::TestActorClient;
-use cotest::scenarios::circle_poll_scope_live::{circle_create, circle_event, join_circle};
+use arkret_models_collaboration::governance::{membership_invite::MembershipPayloadState, realm_join_intake::RealmJoinIntent};
 use cotest::scenarios::human_device_producer_live::{
-    create_realm_with_join_rule, submit_and_expect_commit,
+    create_realm_with_join_rule, membership_payload, prepare_join, submit_and_expect_commit,
 };
 use garth::{AccountSubscribeBatch, AccountSubscribeParameters, AccountSubscribeTransport};
 use inkson::sync_engine::NativeAccountHost;
-use serde_json::json;
+
 
 struct RevokeAfterIssuance {
     author: TestActorClient,
@@ -23,15 +23,8 @@ struct RevokeAfterIssuance {
     leave: Event,
     account_id: arkret_wire::AccountId,
     issued: RealmStateSnapshot,
-    target: CommitStreamRef,
     revoked: CommitStreamRef,
-    held: Mutex<
-        Option<(
-            AccountSubscribeBatch,
-            RealmStateSnapshot,
-            RealmStateSnapshot,
-        )>,
-    >,
+    held: Mutex<Option<(AccountSubscribeBatch, RealmStateSnapshot)>>,
 }
 
 impl RevokeAfterIssuance {
@@ -83,14 +76,8 @@ impl RevokeAfterIssuance {
                         && head.commit_id == basis.anchor_commit_ref),
             "the actual Account basis must bind an independent history original at the issued cut"
         );
-        let CommitStreamRef::Circle { circle_id, .. } = &window.stream_ref else {
-            anyhow::bail!("revocation fixture requires actual Circle windows");
-        };
         let member = CurrentSelector::MemberState {
             actor_id: ActorId::account(self.account_id.clone()),
-        };
-        let definition = CurrentSelector::Circle {
-            circle_id: circle_id.clone(),
         };
         let expected_entries = self
             .issued
@@ -105,10 +92,9 @@ impl RevokeAfterIssuance {
                 (source_stream_ref == &window.stream_ref
                     && !matches!(
                         selector,
-                        CurrentSelector::Circle { .. } | CurrentSelector::Sidecar { .. }
+                        CurrentSelector::Sidecar { .. }
                     ))
                     || selector == &member
-                    || selector == &definition
             })
             .cloned()
             .collect::<Vec<_>>();
@@ -177,38 +163,15 @@ impl AccountSubscribeTransport for RevokeAfterIssuance {
                 .cloned()
                 .ok_or_else(|| {
                     garth::Error::Protocol(
-                        "actual Account frame omitted a required Circle window".into(),
+                        "actual Account frame omitted a required Realm window".into(),
                     )
                 })
         };
-        let target_window = window(&self.target)?;
         let revoked_window = window(&self.revoked)?;
-        if target_window
-            .window_start_basis
-            .as_ref()
-            .and_then(|basis| basis.anchor_position.checked_add(21))
-            != Some(target_window.next_position)
-            || revoked_window
-                .window_start_basis
-                .as_ref()
-                .and_then(|basis| basis.anchor_position.checked_add(2))
-                != Some(revoked_window.next_position)
-        {
-            return Err(garth::Error::Protocol("the real frame must carry twenty target messages and the other Circle's one real Strand tail".into()));
+        if revoked_window.window_start_basis.as_ref().and_then(|basis| basis.anchor_position.checked_add(21)) != Some(revoked_window.next_position) {
+            return Err(garth::Error::Protocol("expected the twenty accepted messages after the issued cut".into()));
         }
-        let target = self
-            .history_original(&target_window)
-            .await
-            .map_err(|error| garth::Error::Protocol(error.to_string()))?;
-        let revoked = self
-            .history_original(&revoked_window)
-            .await
-            .map_err(|error| garth::Error::Protocol(error.to_string()))?;
-        if target.snapshot_id == revoked.snapshot_id {
-            return Err(garth::Error::Protocol(
-                "distinct Circle windows must have distinct exact history originals".into(),
-            ));
-        }
+        let revoked = self.history_original(&revoked_window).await.map_err(|error| garth::Error::Protocol(error.to_string()))?;
         if self.held.lock().unwrap().is_some() {
             return Err(garth::Error::Protocol(
                 "refused Account frame unexpectedly retried".into(),
@@ -222,7 +185,7 @@ impl AccountSubscribeTransport for RevokeAfterIssuance {
         )
         .await
         .map_err(|error| garth::Error::Protocol(error.to_string()))?;
-        *self.held.lock().unwrap() = Some((batch.clone(), target, revoked));
+        *self.held.lock().unwrap() = Some((batch.clone(), revoked));
         Ok(arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeReadAction::Batch(batch))
     }
 }
@@ -240,53 +203,20 @@ async fn run() -> Result<()> {
     let author = &fixture.author;
     let native =
         crate::conformance::account_blocklist_projection::native_account_session(author).await?;
-    let realm = RealmId::new(
-        create_realm_with_join_rule(
-            author,
-            "Exact basis revocation",
-            "public",
-            &[&fixture.server],
-        )
-        .await?,
-    )?;
+    let founder = cotest::scenarios::mls_lifecycle_live::Member::provision(&fixture.server, &fixture._coauth,
+        "revocation-founder", "ak:device:01904100-0000-7000-8000-0000000000f2").await?;
+    let realm = RealmId::new(create_realm_with_join_rule(&founder.client, "Revocable membership", "public", &[&fixture.server]).await?)?;
+    let independent = RealmId::new(author.create_realm("Readable after withdrawal").await?)?;
+    let target_original = author.sdk().realm_state_snapshot_head(&independent).await?;
     let principal = author.principal.as_ref().context("founder")?;
     let account_id = arkret_wire::AccountId::new(
         principal.core_id.clone(),
         fixture.server.service_id().clone(),
     );
-    let actor = ActorId::account(account_id.clone());
-    let mut circles = Vec::new();
-    for index in 0..2 {
-        let circle = circle_create(
-            author,
-            realm.as_str(),
-            &actor,
-            &format!("Private {index}"),
-            &format!("Scope-{index}"),
-        )
-        .await?;
-        join_circle(author, realm.as_str(), &circle, &actor).await?;
-        circles.push(circle);
-    }
-    circles.sort();
-    let target = CommitStreamRef::Circle {
-        realm_id: realm.clone(),
-        circle_id: circles[0].clone(),
-    };
-    let strand = circle_event(
-        author,
-        realm.as_str(),
-        &circles[0],
-        EventKind::StrandCreate,
-        json!({"object":{
-            "schema":"ak.schema.strand.v1","realm_id":realm,"scope_circle_id":circles[0],
-            "tracks":{"discussion":{"is_primary":true,"profile":"discussion"}},
-            "metadata":{"title":"Still readable"},"state":"active","created_by":actor
-        }}),
-    )
-    .await?;
-    submit_and_expect_commit(author, &account_id, &author.device_id, &strand).await?;
-    let strand_id = StrandId::from_event_id(&strand.event_id);
+    prepare_join(author, realm.as_str(), &fixture.server, "ak:request:019b0000-0000-7000-8000-000000002801", RealmJoinIntent::MemberJoin).await?;
+    let join = author.author_event(realm.as_str(), EventKind::MemberState.as_str(), membership_payload(realm.as_str(), account_id.clone(), MembershipPayloadState::Join, "read shared history")?).await?;
+    submit_and_expect_commit(author, &account_id, &author.device_id, &join).await?;
+    let strand_id = founder.client.default_strand_id(realm.as_str())?;
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("native-account.json");
     let host = NativeAccountHost::new_for_realm(
@@ -299,46 +229,23 @@ async fn run() -> Result<()> {
     .await?;
     host.catch_up_selected_realm_until_complete(&realm).await?;
     let issued = author.sdk().realm_state_snapshot_head(&realm).await?;
-    // Advance the other real Circle after its issued anchor. Its delivered
-    // join at position 0 then has a real successor and a history basis; an
-    // unchanged head at the genesis floor would have no such basis.
-    let revoked_tail = circle_event(
-        author,
-        realm.as_str(),
-        &circles[1],
-        EventKind::StrandCreate,
-        json!({"object":{
-            "schema":"ak.schema.strand.v1","realm_id":realm,"scope_circle_id":circles[1],
-            "tracks":{"discussion":{"is_primary":true,"profile":"discussion"}},
-            "metadata":{"title":"Revoked scope tail"},"state":"active","created_by":actor
-        }}),
-    )
-    .await?;
-    submit_and_expect_commit(author, &account_id, &author.device_id, &revoked_tail).await?;
     for index in 0..20 {
-        let event = circle_event(author,realm.as_str(),&circles[0],EventKind::MessageCreate,json!({
-            "strand_id":strand_id,"track_name":"discussion","content":{"kind":"ak.content.text","body":format!("Held target tail {index}")}
-        })).await?;
-        submit_and_expect_commit(author, &account_id, &author.device_id, &event).await?;
+        let payload = cotest::harness::message_create_text_payload_for_strand(arkret_wire::StrandId::new(strand_id.clone())?, &format!("Held history {index}"))?;
+        let event = founder.client.author_event(realm.as_str(), EventKind::MessageCreate.as_str(), payload).await?;
+        submit_and_expect_commit(&founder.client, &founder.account, &founder.client.device_id, &event).await?;
     }
     let before = serde_json::to_value(host.state_store().load())?;
     let committed =
         serde_json::to_value(host.state_store().conformance_committed_account_state()?)?;
     let checkpoint = host.state_store().conformance_account_checkpoint_token()?;
-    let leave = circle_event(author,realm.as_str(),&circles[1],EventKind::CircleMemberState,json!({
-        "circle_id":circles[1],"member_id":actor,"membership":"leave","expected_membership":"join"
-    })).await?;
+    let leave = author.author_event(realm.as_str(), EventKind::MemberState.as_str(), membership_payload(realm.as_str(), account_id.clone(), MembershipPayloadState::Leave, "withdraw during disclosure")?).await?;
     let rail = RevokeAfterIssuance {
         author: author.clone(),
         http: native.client(),
         leave,
         account_id: account_id.clone(),
         issued: issued.clone(),
-        target: target.clone(),
-        revoked: CommitStreamRef::Circle {
-            realm_id: realm.clone(),
-            circle_id: circles[1].clone(),
-        },
+        revoked: CommitStreamRef::Realm { realm_id: realm.clone() },
         held: Default::default(),
     };
     let refused = host.catch_up_with_conformance_transport(&rail).await;
@@ -347,9 +254,9 @@ async fn run() -> Result<()> {
         "real Account frame was never issued: {refused:?}"
     );
     ensure!(
-        matches!(&refused,Err(garth::Error::Api { status:503, error })
-        if error.error_code() == Some(arkret_wire::ErrorCode::RealmStateSnapshotUnavailable)),
-        "held frame did not fail at exact whole-original unavailability: {refused:?}"
+        matches!(&refused,Err(garth::Error::Api { status:403, error })
+        if error.error_code() == Some(arkret_wire::ErrorCode::CapabilityDenied)),
+        "held frame did not fail at the Realm membership disclosure gate: {refused:?}"
     );
     ensure!(
         serde_json::to_value(host.state_store().load())? == before
@@ -358,7 +265,7 @@ async fn run() -> Result<()> {
             && host.state_store().conformance_account_checkpoint_token()? == checkpoint,
         "rejected whole Account frame changed durable rows, root or cursor"
     );
-    let (_, target_original, revoked_original) = rail
+    let (_, revoked_original) = rail
         .held
         .lock()
         .unwrap()
@@ -366,7 +273,7 @@ async fn run() -> Result<()> {
         .context("held actual Account frame")?;
     let still_readable = rail
         .http
-        .realm_state_snapshot_by_ref(&realm, &target_original.snapshot_id)
+        .realm_state_snapshot_by_ref(&independent, &target_original.snapshot_id)
         .await?;
     cotest::scenarios::protocol_payloads::snapshot_head_disclosure::ensure_same_object(
         &target_original,
@@ -384,25 +291,15 @@ async fn run() -> Result<()> {
         .map_err(garth::Error::from);
     ensure!(
         [&revoked_read, &full_read].iter().all(|read| matches!(read,
-            Err(garth::Error::Api { status:503, error })
-                if error.error_code() == Some(arkret_wire::ErrorCode::RealmStateSnapshotUnavailable))),
+            Err(garth::Error::Api { status:403, error })
+                if error.error_code() == Some(arkret_wire::ErrorCode::CapabilityDenied))),
         "the revoked history original and its covered full recovery original must both be wholly unavailable"
     );
-    let current = author.sdk().realm_state_snapshot_head(&realm).await?;
-    ensure!(
-        current
-            .visible_stream_heads
-            .iter()
-            .any(|head| head.stream_ref == target)
-    );
-    ensure!(
-        !current
-            .visible_stream_heads
-            .iter()
-            .any(|head| matches!(&head.stream_ref,
-        CommitStreamRef::Circle { circle_id,.. } if circle_id == &circles[1]))
-    );
-    host.catch_up_selected_realm_until_complete(&realm).await?;
+    let current = author.sdk().realm_state_snapshot_head(&independent).await?;
+    ensure!(current.visible_stream_heads.iter().any(|head| matches!(&head.stream_ref, CommitStreamRef::Realm { realm_id } if realm_id == &independent)));
+    drop(host);
+    let host = NativeAccountHost::new_for_realm(native.client(), account_id.clone(), principal.device_id.clone(), inkson::LocalStateStore::with_path(&path), independent.clone()).await?;
+    host.catch_up_selected_realm_until_complete(&independent).await?;
     ensure!(
         host.state_store().conformance_account_checkpoint_token()? != checkpoint,
         "fresh lawful Account window did not recover its checkpoint"
@@ -414,7 +311,7 @@ async fn run() -> Result<()> {
         account_id,
         principal.device_id.clone(),
         inkson::LocalStateStore::with_path(&path),
-        realm,
+        independent,
     )
     .await?;
     ensure!(

@@ -38,7 +38,7 @@ pub(super) fn envelope() -> Result<SignalEnvelope> {
         authority_commit_id: RealmCommitId::new(
             "ak:realm_commit:Ac08ROpjn3Ilj_UaM-_XLY93u4SUTptG0-Q-_CUDb5aS",
         )?,
-        parent_realm_authority_commit_id: None,
+
         signal_class: SignalClass::Session,
         sent_at,
         expires_at: sent_at + Duration::seconds(30),
@@ -277,7 +277,7 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
                 ensure!(
                     generator["authority_cases"]
                         .as_array()
-                        .is_some_and(|cases| cases.len() == 10)
+                        .is_some_and(|cases| cases.len() == 9)
                 );
             }
             "signal_peer_relay_limit_matrix" => {

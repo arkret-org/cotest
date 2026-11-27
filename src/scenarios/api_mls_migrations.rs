@@ -14,7 +14,6 @@ mod receipts;
 #[derive(Clone, Copy)]
 pub enum MlsApiCase {
     MarkerPrivacy,
-    CircleMarkers,
     Discussion,
     ReceiptSignals,
 }
@@ -59,7 +58,6 @@ pub(super) async fn exercise(
     };
     match case {
         MlsApiCase::MarkerPrivacy => marker_privacy(&mut ctx).await,
-        MlsApiCase::CircleMarkers => discussion::markers(&ctx).await,
         MlsApiCase::Discussion => discussion::run(&mut ctx).await,
         MlsApiCase::ReceiptSignals => receipts::run(&mut ctx).await,
     }?;
@@ -74,14 +72,7 @@ pub(crate) async fn scan(
         ScopeRef::Realm { realm_id } => CommitStreamRef::Realm {
             realm_id: realm_id.clone(),
         },
-        ScopeRef::Circle {
-            realm_id,
-            circle_id,
-        } => CommitStreamRef::Circle {
-            realm_id: realm_id.clone(),
-            circle_id: circle_id.clone(),
-        },
-        _ => anyhow::bail!("API migration requires a Realm or Circle stream"),
+        _ => anyhow::bail!("ordinary discussion requires a Realm stream"),
     };
     let scan = client
         .sdk()

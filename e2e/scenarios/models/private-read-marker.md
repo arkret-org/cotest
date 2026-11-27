@@ -135,12 +135,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
   per_realm_mls` 的 Realm;bob 发的 M4 在 server 侧 payload 是密文,但 server 仍能投递 to-device
   wake;notification 投影由 client 在解密后产生 — 测试断言 `/_arkret/self/account/subscribe`
   的 notification projection 不暴露明文 body,只暴露 source event / sender / timestamp / `encrypted: true`
-- **E10.3 Circle-scoped private Strand 的 read marker 独立于 Realm-default Strand**:在 Realm `R`
-  内创建公开 Strand `F_public`,再创建 Circle `C_discussion` 与私密 Strand `F_private`
-  (`F_private.scope_circle_id = C_discussion`),并用 `confidential_discussion_of` Relation 指回
-  `F_public`;alice 在 `F_private` 的 `discussion` track 把 marker 推到 `M_private`,但
-  `F_public` 的 marker 保持在 `M_public`;断言两个 marker 按
-  `(actor_id, realm_id, read_scope)` 存储,同一 `realm_id` 下不同 `read_scope` 互不污染
+- **E10.3** 在同一 Realm 的两个 Strand 分别推进已读位置，验证每个 Strand 的 marker 独立保存。
 
 ## Implementation notes
 
@@ -156,8 +151,6 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
   `dev-login` 两次得到两个 session token(可能相同也可能不同),分别注入两个 browser context
 - **E2EE 子测试(E10.2)**:cotest 当前没有可靠的 "create encrypted Realm" 入口;先标 fixme,等
   encryption Realm scenario 提供 helper 再补
-- **Circle-scoped private Strand 子测试(E10.3)**:依赖 Circle-scoped private Strand helper、`read_scope`
-  级 account data 命名和 `confidential_discussion_of` Relation 查询路径,目前未实装,标 fixme
 
 ## 总耗时预估
 

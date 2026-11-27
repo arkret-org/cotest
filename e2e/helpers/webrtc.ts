@@ -184,13 +184,6 @@ export async function prepareSignalEnvelope(
     throw new Error(`Realm ${realmId} has no accepted commit head`);
   }
   envelope.authority_commit_id = head.commit_id;
-  if (scopeRef.kind === "circle") {
-    const parent = await readCommitStreamHeadApi(request, token, realmId);
-    if (!parent) throw new Error("Circle Signal has no accepted parent Realm cut");
-    envelope.parent_realm_authority_commit_id = parent.commit_id;
-  } else {
-    delete envelope.parent_realm_authority_commit_id;
-  }
   // encryption-and-audit.md §2.5: the Signal AEAD binds the scope's accepted
   // current MLS group, read from the caller-visible Realm state snapshot.
   const current = await readScopeMlsGroupCurrentApi(
@@ -387,11 +380,7 @@ export async function captureSubmittedSignalEnvelope(
   const receiverId = await currentActorIdApi(request, receiverToken);
   const head = await readSignalCut(request, receiverToken, realmId, scopeRef,
     envelope.authority_commit_id, envelope.sent_at);
-  const parent = scopeRef.kind === "circle"
-    ? await readSignalCut(request, receiverToken, realmId, { kind: "realm", realm_id: realmId },
-      envelope.parent_realm_authority_commit_id, envelope.sent_at)
-    : undefined;
-  if (!head || (scopeRef.kind === "circle" && !parent)) {
+  if (!head) {
     throw new Error("Signal receiver lacks the accepted independent authority cuts");
   }
   const captured = await captureSignalEnvelopes(receiverToken, realmId, () =>
@@ -410,7 +399,6 @@ export async function captureSubmittedSignalEnvelope(
     recipient_account_id: accountActorId(receiverId).account_id,
     group_state_ref: receiverGroup.groupStateRef,
     authority_commit_id: head.commit_id,
-    parent_realm_authority_commit_id: parent?.commit_id ?? null,
     frames: captured.frames,
   });
   if (opened.plaintexts.length !== captured.envelopes.length) {

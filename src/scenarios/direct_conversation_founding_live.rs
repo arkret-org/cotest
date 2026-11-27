@@ -255,7 +255,7 @@ async fn fixed_station_footprint(
              'forward_intents',(SELECT COALESCE(jsonb_agg(jsonb_build_object(\
                  'event_pk',f.event_pk,'status',f.status,'reason_code',f.reason_code,\
                  'original_submission_json',f.original_submission_json,'peer_request_json',f.peer_request_json,\
-                 'accepted_commit_json',f.accepted_commit_json,'circle_leave_parent_revision',f.circle_leave_parent_revision)\
+                 'accepted_commit_json',f.accepted_commit_json)\
                  ORDER BY f.event_pk),'[]'::jsonb) FROM authority_forward_attempts f \
                  JOIN canonical_events e ON e.pk=f.event_pk WHERE e.envelope->>'event_id'=$3),\
              'claims',(SELECT COALESCE(jsonb_agg(to_jsonb(c) ORDER BY source_id,claim_request_id),'[]'::jsonb) FROM peer_keypackage_claims c WHERE source_id=$4 AND claim_request_id=$2),\

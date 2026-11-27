@@ -81,10 +81,9 @@ export type AppletPackage = {
     "token_scope": {
       "actions": string[];
       "resources": Array<{
-        "kind": "realm" | "space" | "circle" | "strand" | "message" | "morph" | "object" | "relation" | "view" | "event" | "actor" | "schema" | "policy" | "invite" | "notification" | "read_cursor" | "blob" | "*" | "realm_actor";
+        "kind": "realm" | "space" | "strand" | "message" | "morph" | "object" | "relation" | "view" | "event" | "actor" | "schema" | "policy" | "invite" | "notification" | "read_cursor" | "blob" | "*" | "realm_actor";
         "realm_id"?: string;
         "space_id"?: string;
-        "circle_id"?: string;
         "object_kind"?: string;
         "object_ref"?: string;
         "strand_id"?: string;
@@ -200,10 +199,9 @@ export type AppletInstallRequestBody = {
       "token_scope": {
         "actions": string[];
         "resources": Array<{
-          "kind": "realm" | "space" | "circle" | "strand" | "message" | "morph" | "object" | "relation" | "view" | "event" | "actor" | "schema" | "policy" | "invite" | "notification" | "read_cursor" | "blob" | "*" | "realm_actor";
+          "kind": "realm" | "space" | "strand" | "message" | "morph" | "object" | "relation" | "view" | "event" | "actor" | "schema" | "policy" | "invite" | "notification" | "read_cursor" | "blob" | "*" | "realm_actor";
           "realm_id"?: string;
           "space_id"?: string;
-          "circle_id"?: string;
           "object_kind"?: string;
           "object_ref"?: string;
           "strand_id"?: string;
@@ -282,10 +280,6 @@ export type AppletInstallRequestBody = {
     "effective_scope": {
       "kind": "realm";
       "realm_id": string;
-    } | {
-      "kind": "circle";
-      "realm_id": string;
-      "circle_id": string;
     };
     "approval_request": {
       "approve_actions": string[];
@@ -305,15 +299,11 @@ export type AppletInstallRequestBody = {
     };
     "registration_event": {
       "event_id": string;
-      "kind": "ak.account_data.set" | "ak.agent.action_approve" | "ak.agent.action_reject" | "ak.agent.action_request" | "ak.agent.draft.propose" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.circle.archive" | "ak.circle.create" | "ak.circle.history_access" | "ak.circle.member.state" | "ak.circle.restore" | "ak.circle.tombstone" | "ak.circle.update" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.push_route" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.read_cursor.advance" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.realm_invite_link.accept";
+      "kind": "ak.account_data.set" | "ak.agent.action_approve" | "ak.agent.action_reject" | "ak.agent.action_request" | "ak.agent.draft.propose" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.push_route" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.read_cursor.advance" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.member.state" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.realm_invite_link.accept";
       "realm_id"?: string;
       "scope_ref": {
         "kind": "realm";
         "realm_id": string;
-      } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
       } | {
         "kind": "sidecar";
         "realm_id": string;
@@ -420,15 +410,11 @@ export type AppletInstallRequestBody = {
     };
     "capability_grant_events": Array<{
       "event_id": string;
-      "kind": "ak.account_data.set" | "ak.agent.action_approve" | "ak.agent.action_reject" | "ak.agent.action_request" | "ak.agent.draft.propose" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.circle.archive" | "ak.circle.create" | "ak.circle.history_access" | "ak.circle.member.state" | "ak.circle.restore" | "ak.circle.tombstone" | "ak.circle.update" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.push_route" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.read_cursor.advance" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.realm_invite_link.accept";
+      "kind": "ak.account_data.set" | "ak.agent.action_approve" | "ak.agent.action_reject" | "ak.agent.action_request" | "ak.agent.draft.propose" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.push_route" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.read_cursor.advance" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.member.state" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.realm_invite_link.accept";
       "realm_id"?: string;
       "scope_ref": {
         "kind": "realm";
         "realm_id": string;
-      } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
       } | {
         "kind": "sidecar";
         "realm_id": string;
@@ -540,10 +526,6 @@ export type AppletBotPreviewRequestBody = {
   "effective_scope": {
     "kind": "realm";
     "realm_id": string;
-  } | {
-    "kind": "circle";
-    "realm_id": string;
-    "circle_id": string;
   };
   "service_id": string;
   "request_id": string;
@@ -555,10 +537,6 @@ export type AppletAuthorityMaterialRequestBody = {
   "effective_scope": {
     "kind": "realm";
     "realm_id": string;
-  } | {
-    "kind": "circle";
-    "realm_id": string;
-    "circle_id": string;
   };
   "grant_ids": string[];
 };
@@ -570,10 +548,6 @@ export type AppletAuthorityMaterialResponseBody = {
   "effective_scope": {
     "kind": "realm";
     "realm_id": string;
-  } | {
-    "kind": "circle";
-    "realm_id": string;
-    "circle_id": string;
   };
   "registration": {
     "commit": {
@@ -582,10 +556,6 @@ export type AppletAuthorityMaterialResponseBody = {
       "stream_ref": {
         "kind": "realm";
         "realm_id": string;
-      } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
       } | {
         "kind": "sidecar";
         "realm_id": string;
@@ -612,15 +582,11 @@ export type AppletAuthorityMaterialResponseBody = {
     };
     "event": {
       "event_id": string;
-      "kind": "ak.agent.action_approve" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.circle.archive" | "ak.circle.create" | "ak.circle.history_access" | "ak.circle.member.state" | "ak.circle.restore" | "ak.circle.tombstone" | "ak.circle.update" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.mls.history_grant" | "ak.mls.history_recovery" | "ak.mls.history_request" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.realm_invite_link.accept" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update";
+      "kind": "ak.agent.action_approve" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.mls.history_grant" | "ak.mls.history_recovery" | "ak.mls.history_request" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.realm_invite_link.accept" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.create" | "ak.sidecar.member.state" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update";
       "realm_id"?: string;
       "scope_ref": {
         "kind": "realm";
         "realm_id": string;
-      } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
       } | {
         "kind": "sidecar";
         "realm_id": string;
@@ -870,10 +836,6 @@ export type AppletAuthorityMaterialResponseBody = {
         "kind": "realm";
         "realm_id": string;
       } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
-      } | {
         "kind": "sidecar";
         "realm_id": string;
         "sidecar_id": string;
@@ -899,15 +861,11 @@ export type AppletAuthorityMaterialResponseBody = {
     };
     "event": {
       "event_id": string;
-      "kind": "ak.agent.action_approve" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.circle.archive" | "ak.circle.create" | "ak.circle.history_access" | "ak.circle.member.state" | "ak.circle.restore" | "ak.circle.tombstone" | "ak.circle.update" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.mls.history_grant" | "ak.mls.history_recovery" | "ak.mls.history_request" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.realm_invite_link.accept" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update";
+      "kind": "ak.agent.action_approve" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.mls.history_grant" | "ak.mls.history_recovery" | "ak.mls.history_request" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.realm_invite_link.accept" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.create" | "ak.sidecar.member.state" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update";
       "realm_id"?: string;
       "scope_ref": {
         "kind": "realm";
         "realm_id": string;
-      } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
       } | {
         "kind": "sidecar";
         "realm_id": string;
@@ -1158,10 +1116,6 @@ export type AppletAuthorityMaterialResponseBody = {
         "kind": "realm";
         "realm_id": string;
       } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
-      } | {
         "kind": "sidecar";
         "realm_id": string;
         "sidecar_id": string;
@@ -1216,10 +1170,6 @@ export type AppletAuthorityMaterialResponseBody = {
         "kind": "realm";
         "realm_id": string;
       } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
-      } | {
         "kind": "sidecar";
         "realm_id": string;
         "sidecar_id": string;
@@ -1235,14 +1185,9 @@ export type AppletAuthorityMaterialResponseBody = {
         "id"?: string;
         "schema": "ak.schema.relation.v1";
         "realm_id": string;
-        "scope_circle_id"?: string;
         "effective_scope"?: {
           "kind": "realm";
           "realm_id": string;
-        } | {
-          "kind": "circle";
-          "realm_id": string;
-          "circle_id": string;
         };
         "relation_kind": string;
         "from_ref": string | {
@@ -1325,10 +1270,6 @@ export type AppletAuthorityMaterialResponseBody = {
         "kind": "realm";
         "realm_id": string;
       } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
-      } | {
         "kind": "sidecar";
         "realm_id": string;
         "sidecar_id": string;
@@ -1375,10 +1316,6 @@ export type AppletAuthorityMaterialResponseBody = {
         "kind": "realm";
         "realm_id": string;
       } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
-      } | {
         "kind": "sidecar";
         "realm_id": string;
         "sidecar_id": string;
@@ -1405,10 +1342,6 @@ export type AppletAuthorityMaterialResponseBody = {
       "source_stream_ref": {
         "kind": "realm";
         "realm_id": string;
-      } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
       } | {
         "kind": "sidecar";
         "realm_id": string;
@@ -1463,10 +1396,9 @@ export type AppletAuthorityMaterialResponseBody = {
         };
         "actions": string[];
         "resources": Array<{
-          "kind": "realm" | "space" | "circle" | "strand" | "message" | "morph" | "object" | "relation" | "view" | "event" | "actor" | "schema" | "policy" | "invite" | "notification" | "read_cursor" | "blob" | "*" | "realm_actor";
+          "kind": "realm" | "space" | "strand" | "message" | "morph" | "object" | "relation" | "view" | "event" | "actor" | "schema" | "policy" | "invite" | "notification" | "read_cursor" | "blob" | "*" | "realm_actor";
           "realm_id"?: string;
           "space_id"?: string;
-          "circle_id"?: string;
           "object_kind"?: string;
           "object_ref"?: string;
           "strand_id"?: string;
@@ -1546,7 +1478,6 @@ export type AppletAuthorityMaterialResponseBody = {
           "denied_strand_ids"?: string[];
           "allowed_space_ids"?: string[];
           "denied_space_ids"?: string[];
-          "allowed_circle_ids"?: string[];
           "allowed_session_ids"?: string[];
           "allowed_view_kinds"?: string[];
           "allowed_view_renderers"?: string[];
@@ -1702,10 +1633,6 @@ export type AppletAuthorityMaterialResponseBody = {
         "kind": "realm";
         "realm_id": string;
       } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
-      } | {
         "kind": "sidecar";
         "realm_id": string;
         "sidecar_id": string;
@@ -1722,10 +1649,6 @@ export type AppletAuthorityMaterialResponseBody = {
           "kind": "realm";
           "realm_id": string;
         } | {
-          "kind": "circle";
-          "realm_id": string;
-          "circle_id": string;
-        } | {
           "kind": "sidecar";
           "realm_id": string;
           "sidecar_id": string;
@@ -1741,10 +1664,6 @@ export type AppletAuthorityMaterialResponseBody = {
           "stream_ref": {
             "kind": "realm";
             "realm_id": string;
-          } | {
-            "kind": "circle";
-            "realm_id": string;
-            "circle_id": string;
           } | {
             "kind": "sidecar";
             "realm_id": string;
@@ -1766,10 +1685,6 @@ export type AppletAuthorityMaterialResponseBody = {
             "stream_ref": {
               "kind": "realm";
               "realm_id": string;
-            } | {
-              "kind": "circle";
-              "realm_id": string;
-              "circle_id": string;
             } | {
               "kind": "sidecar";
               "realm_id": string;
@@ -1808,10 +1723,6 @@ export type AppletAuthorityMaterialResponseBody = {
       "source_stream_ref": {
         "kind": "realm";
         "realm_id": string;
-      } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
       } | {
         "kind": "sidecar";
         "realm_id": string;
@@ -1897,10 +1808,6 @@ export type AppletAuthorityMaterialResponseBody = {
             "effective_scope": {
               "kind": "realm";
               "realm_id": string;
-            } | {
-              "kind": "circle";
-              "realm_id": string;
-              "circle_id": string;
             };
           } | {
             "kind": "managed_actor";
@@ -2055,10 +1962,6 @@ export type AppletAuthorityMaterialResponseBody = {
         "kind": "realm";
         "realm_id": string;
       } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
-      } | {
         "kind": "sidecar";
         "realm_id": string;
         "sidecar_id": string;
@@ -2087,10 +1990,6 @@ export type AppletManagedDeviceMetadata = {
   "effective_scope": {
     "kind": "realm";
     "realm_id": string;
-  } | {
-    "kind": "circle";
-    "realm_id": string;
-    "circle_id": string;
   };
   "nonce": string;
 };
@@ -2508,10 +2407,6 @@ export type MessageAuthoringIntent = {
         "kind": "realm";
         "realm_id": string;
       } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
-      } | {
         "kind": "sidecar";
         "realm_id": string;
         "sidecar_id": string;
@@ -2792,10 +2687,6 @@ export type ConsentCurrentReadResponseBody = {
       "kind": "realm";
       "realm_id": string;
     } | {
-      "kind": "circle";
-      "realm_id": string;
-      "circle_id": string;
-    } | {
       "kind": "sidecar";
       "realm_id": string;
       "sidecar_id": string;
@@ -2831,10 +2722,6 @@ export type ConsentCurrentReadResponseBody = {
       "source_stream_ref": {
         "kind": "realm";
         "realm_id": string;
-      } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
       } | {
         "kind": "sidecar";
         "realm_id": string;
@@ -2974,98 +2861,6 @@ export type PublicPrincipalResolution = {
       "jws": string;
     };
   };
-};
-
-/** `circle-operations.schema.json#/$defs/circle_view` — closed object schema. */
-export type CircleView = {
-  "circle_id": string;
-  "realm_id": string;
-  "profile_ref"?: string;
-  "title": string;
-  "summary"?: string;
-  "display": {
-    "short_name": string;
-    "color_token": "slate" | "red" | "orange" | "amber" | "yellow" | "lime" | "green" | "emerald" | "teal" | "cyan" | "sky" | "blue" | "indigo" | "violet" | "fuchsia" | "pink" | "gray_high_contrast";
-    "symbol": unknown;
-  };
-  "directory_visibility": "members" | "realm_members";
-  "join_rule": "invite" | "knock" | "public";
-  "history_access": "since_join" | "all_history_for_current_members";
-  "mls_group_id"?: string;
-  "state": "active" | "archived" | "tombstoned";
-  "viewer_membership"?: "join" | "knock" | "leave" | "ban";
-  "member_ids": Array<{
-    "kind": "account";
-    "account_id": {
-      "principal_id": string;
-      "station_id": string;
-    };
-  } | {
-    "kind": "service";
-    "service_id": string;
-  } | {
-    "kind": "realm";
-    "realm_actor_id": {
-      "realm_id": string;
-      "principal_id": string;
-    };
-  }>;
-  "created_by": {
-    "kind": "account";
-    "account_id": {
-      "principal_id": string;
-      "station_id": string;
-    };
-  } | {
-    "kind": "service";
-    "service_id": string;
-  } | {
-    "kind": "realm";
-    "realm_actor_id": {
-      "realm_id": string;
-      "principal_id": string;
-    };
-  };
-  "created_at": string;
-  "updated_by"?: {
-    "kind": "account";
-    "account_id": {
-      "principal_id": string;
-      "station_id": string;
-    };
-  } | {
-    "kind": "service";
-    "service_id": string;
-  } | {
-    "kind": "realm";
-    "realm_actor_id": {
-      "realm_id": string;
-      "principal_id": string;
-    };
-  };
-  "updated_at"?: string;
-};
-
-/** `circle-operations.schema.json#/$defs/circle_membership_response_body` — closed object schema. */
-export type CircleMembershipResponseBody = {
-  "circle_id": string;
-  "member_id": {
-    "kind": "account";
-    "account_id": {
-      "principal_id": string;
-      "station_id": string;
-    };
-  } | {
-    "kind": "service";
-    "service_id": string;
-  } | {
-    "kind": "realm";
-    "realm_actor_id": {
-      "realm_id": string;
-      "principal_id": string;
-    };
-  };
-  "membership": "join" | "knock" | "leave" | "ban";
 };
 
 /** `contact-operations.schema.json#/$defs/contact_peer` — closed object schema. */
@@ -3600,15 +3395,11 @@ export type ContactRequestBody = {
   "reservation_handle": string;
   "signed_event": {
     "event_id": string;
-    "kind": "ak.account_data.set" | "ak.agent.action_approve" | "ak.agent.action_reject" | "ak.agent.action_request" | "ak.agent.draft.propose" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.circle.archive" | "ak.circle.create" | "ak.circle.history_access" | "ak.circle.member.state" | "ak.circle.restore" | "ak.circle.tombstone" | "ak.circle.update" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.push_route" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.read_cursor.advance" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.realm_invite_link.accept";
+    "kind": "ak.account_data.set" | "ak.agent.action_approve" | "ak.agent.action_reject" | "ak.agent.action_request" | "ak.agent.draft.propose" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.push_route" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.read_cursor.advance" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.member.state" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.realm_invite_link.accept";
     "realm_id"?: string;
     "scope_ref": {
       "kind": "realm";
       "realm_id": string;
-    } | {
-      "kind": "circle";
-      "realm_id": string;
-      "circle_id": string;
     } | {
       "kind": "sidecar";
       "realm_id": string;
@@ -3736,15 +3527,11 @@ export type ContactRespondRequestBody = {
   "reservation_handle": string;
   "signed_event": {
     "event_id": string;
-    "kind": "ak.account_data.set" | "ak.agent.action_approve" | "ak.agent.action_reject" | "ak.agent.action_request" | "ak.agent.draft.propose" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.circle.archive" | "ak.circle.create" | "ak.circle.history_access" | "ak.circle.member.state" | "ak.circle.restore" | "ak.circle.tombstone" | "ak.circle.update" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.push_route" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.read_cursor.advance" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.realm_invite_link.accept";
+    "kind": "ak.account_data.set" | "ak.agent.action_approve" | "ak.agent.action_reject" | "ak.agent.action_request" | "ak.agent.draft.propose" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.push_route" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.read_cursor.advance" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.member.state" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.realm_invite_link.accept";
     "realm_id"?: string;
     "scope_ref": {
       "kind": "realm";
       "realm_id": string;
-    } | {
-      "kind": "circle";
-      "realm_id": string;
-      "circle_id": string;
     } | {
       "kind": "sidecar";
       "realm_id": string;
@@ -3871,15 +3658,11 @@ export type ContactRejectRequestBody = {
   "reservation_handle": string;
   "signed_event": {
     "event_id": string;
-    "kind": "ak.account_data.set" | "ak.agent.action_approve" | "ak.agent.action_reject" | "ak.agent.action_request" | "ak.agent.draft.propose" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.circle.archive" | "ak.circle.create" | "ak.circle.history_access" | "ak.circle.member.state" | "ak.circle.restore" | "ak.circle.tombstone" | "ak.circle.update" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.push_route" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.read_cursor.advance" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.realm_invite_link.accept";
+    "kind": "ak.account_data.set" | "ak.agent.action_approve" | "ak.agent.action_reject" | "ak.agent.action_request" | "ak.agent.draft.propose" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.push_route" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.read_cursor.advance" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.member.state" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.realm_invite_link.accept";
     "realm_id"?: string;
     "scope_ref": {
       "kind": "realm";
       "realm_id": string;
-    } | {
-      "kind": "circle";
-      "realm_id": string;
-      "circle_id": string;
     } | {
       "kind": "sidecar";
       "realm_id": string;
@@ -4008,15 +3791,11 @@ export type ContactTombstoneRequestBody = {
   "reservation_handle": string;
   "signed_event": {
     "event_id": string;
-    "kind": "ak.account_data.set" | "ak.agent.action_approve" | "ak.agent.action_reject" | "ak.agent.action_request" | "ak.agent.draft.propose" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.circle.archive" | "ak.circle.create" | "ak.circle.history_access" | "ak.circle.member.state" | "ak.circle.restore" | "ak.circle.tombstone" | "ak.circle.update" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.push_route" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.read_cursor.advance" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.realm_invite_link.accept";
+    "kind": "ak.account_data.set" | "ak.agent.action_approve" | "ak.agent.action_reject" | "ak.agent.action_request" | "ak.agent.draft.propose" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.push_route" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.read_cursor.advance" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.member.state" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.realm_invite_link.accept";
     "realm_id"?: string;
     "scope_ref": {
       "kind": "realm";
       "realm_id": string;
-    } | {
-      "kind": "circle";
-      "realm_id": string;
-      "circle_id": string;
     } | {
       "kind": "sidecar";
       "realm_id": string;
@@ -4507,15 +4286,11 @@ export type ContactOperationResponseBody = {
         "kind": "tombstone";
         "signed_event": {
           "event_id": string;
-          "kind": "ak.account_data.set" | "ak.agent.action_approve" | "ak.agent.action_reject" | "ak.agent.action_request" | "ak.agent.draft.propose" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.circle.archive" | "ak.circle.create" | "ak.circle.history_access" | "ak.circle.member.state" | "ak.circle.restore" | "ak.circle.tombstone" | "ak.circle.update" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.push_route" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.read_cursor.advance" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.realm_invite_link.accept";
+          "kind": "ak.account_data.set" | "ak.agent.action_approve" | "ak.agent.action_reject" | "ak.agent.action_request" | "ak.agent.draft.propose" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.push_route" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.read_cursor.advance" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.member.state" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.realm_invite_link.accept";
           "realm_id"?: string;
           "scope_ref": {
             "kind": "realm";
             "realm_id": string;
-          } | {
-            "kind": "circle";
-            "realm_id": string;
-            "circle_id": string;
           } | {
             "kind": "sidecar";
             "realm_id": string;
@@ -4958,15 +4733,11 @@ export type ContactOperationResponseBody = {
         "kind": "tombstone";
         "signed_event": {
           "event_id": string;
-          "kind": "ak.account_data.set" | "ak.agent.action_approve" | "ak.agent.action_reject" | "ak.agent.action_request" | "ak.agent.draft.propose" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.circle.archive" | "ak.circle.create" | "ak.circle.history_access" | "ak.circle.member.state" | "ak.circle.restore" | "ak.circle.tombstone" | "ak.circle.update" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.push_route" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.read_cursor.advance" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.realm_invite_link.accept";
+          "kind": "ak.account_data.set" | "ak.agent.action_approve" | "ak.agent.action_reject" | "ak.agent.action_request" | "ak.agent.draft.propose" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.push_route" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.read_cursor.advance" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.member.state" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.realm_invite_link.accept";
           "realm_id"?: string;
           "scope_ref": {
             "kind": "realm";
             "realm_id": string;
-          } | {
-            "kind": "circle";
-            "realm_id": string;
-            "circle_id": string;
           } | {
             "kind": "sidecar";
             "realm_id": string;
@@ -5299,15 +5070,11 @@ export type ContactOperationResponseBody = {
         "kind": "tombstone";
         "signed_event": {
           "event_id": string;
-          "kind": "ak.account_data.set" | "ak.agent.action_approve" | "ak.agent.action_reject" | "ak.agent.action_request" | "ak.agent.draft.propose" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.circle.archive" | "ak.circle.create" | "ak.circle.history_access" | "ak.circle.member.state" | "ak.circle.restore" | "ak.circle.tombstone" | "ak.circle.update" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.push_route" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.read_cursor.advance" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.realm_invite_link.accept";
+          "kind": "ak.account_data.set" | "ak.agent.action_approve" | "ak.agent.action_reject" | "ak.agent.action_request" | "ak.agent.draft.propose" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.push_route" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.read_cursor.advance" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.member.state" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.realm_invite_link.accept";
           "realm_id"?: string;
           "scope_ref": {
             "kind": "realm";
             "realm_id": string;
-          } | {
-            "kind": "circle";
-            "realm_id": string;
-            "circle_id": string;
           } | {
             "kind": "sidecar";
             "realm_id": string;
@@ -5537,6 +5304,7 @@ export type AgentSidecarView = {
     "id": string;
     "schema": "ak.schema.agent_sidecar.v1";
     "realm_id": string;
+    "source_realm_id": string;
     "controller_account_id": {
       "principal_id": string;
       "station_id": string;
@@ -5810,11 +5578,7 @@ export type SpaceObject = {
   "id"?: string;
   "schema": "ak.schema.space.v1";
   "realm_id": string;
-  "scope_circle_id"?: string;
-  "child_scope_policy"?: {
-    "kind": "allow_any" | "require_e2ee" | "require_same_scope" | "require_scope_circle_id";
-    "scope_circle_id"?: string;
-  };
+  "child_scope_policy"?: boolean;
   "parent_space_id"?: string;
   "kind": string;
   "rank"?: string;
@@ -5931,10 +5695,9 @@ export type CapabilityGrantObject = {
   };
   "actions": string[];
   "resources": Array<{
-    "kind": "realm" | "space" | "circle" | "strand" | "message" | "morph" | "object" | "relation" | "view" | "event" | "actor" | "schema" | "policy" | "invite" | "notification" | "read_cursor" | "blob" | "*" | "realm_actor";
+    "kind": "realm" | "space" | "strand" | "message" | "morph" | "object" | "relation" | "view" | "event" | "actor" | "schema" | "policy" | "invite" | "notification" | "read_cursor" | "blob" | "*" | "realm_actor";
     "realm_id"?: string;
     "space_id"?: string;
-    "circle_id"?: string;
     "object_kind"?: string;
     "object_ref"?: string;
     "strand_id"?: string;
@@ -6014,7 +5777,6 @@ export type CapabilityGrantObject = {
     "denied_strand_ids"?: string[];
     "allowed_space_ids"?: string[];
     "denied_space_ids"?: string[];
-    "allowed_circle_ids"?: string[];
     "allowed_session_ids"?: string[];
     "allowed_view_kinds"?: string[];
     "allowed_view_renderers"?: string[];
@@ -6205,10 +5967,9 @@ export type CapabilityGrantPayload = {
     };
     "actions": string[];
     "resources": Array<{
-      "kind": "realm" | "space" | "circle" | "strand" | "message" | "morph" | "object" | "relation" | "view" | "event" | "actor" | "schema" | "policy" | "invite" | "notification" | "read_cursor" | "blob" | "*" | "realm_actor";
+      "kind": "realm" | "space" | "strand" | "message" | "morph" | "object" | "relation" | "view" | "event" | "actor" | "schema" | "policy" | "invite" | "notification" | "read_cursor" | "blob" | "*" | "realm_actor";
       "realm_id"?: string;
       "space_id"?: string;
-      "circle_id"?: string;
       "object_kind"?: string;
       "object_ref"?: string;
       "strand_id"?: string;
@@ -6288,7 +6049,6 @@ export type CapabilityGrantPayload = {
       "denied_strand_ids"?: string[];
       "allowed_space_ids"?: string[];
       "denied_space_ids"?: string[];
-      "allowed_circle_ids"?: string[];
       "allowed_session_ids"?: string[];
       "allowed_view_kinds"?: string[];
       "allowed_view_renderers"?: string[];
@@ -6391,15 +6151,11 @@ export type InviteDeliveryRequestBody = {
   "schema": "ak.schema.invite_delivery_request.v1";
   "invite_event": {
     "event_id": string;
-    "kind": "ak.account_data.set" | "ak.agent.action_approve" | "ak.agent.action_reject" | "ak.agent.action_request" | "ak.agent.draft.propose" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.circle.archive" | "ak.circle.create" | "ak.circle.history_access" | "ak.circle.member.state" | "ak.circle.restore" | "ak.circle.tombstone" | "ak.circle.update" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.push_route" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.read_cursor.advance" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.realm_invite_link.accept";
+    "kind": "ak.account_data.set" | "ak.agent.action_approve" | "ak.agent.action_reject" | "ak.agent.action_request" | "ak.agent.draft.propose" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.push_route" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.read_cursor.advance" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.member.state" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.realm_invite_link.accept";
     "realm_id"?: string;
     "scope_ref": {
       "kind": "realm";
       "realm_id": string;
-    } | {
-      "kind": "circle";
-      "realm_id": string;
-      "circle_id": string;
     } | {
       "kind": "sidecar";
       "realm_id": string;
@@ -6485,10 +6241,6 @@ export type InviteDeliveryRequestBody = {
       "kind": "realm";
       "realm_id": string;
     } | {
-      "kind": "circle";
-      "realm_id": string;
-      "circle_id": string;
-    } | {
       "kind": "sidecar";
       "realm_id": string;
       "sidecar_id": string;
@@ -6531,10 +6283,6 @@ export type InviteDeliveryRequestBody = {
         "stream_ref": {
           "kind": "realm";
           "realm_id": string;
-        } | {
-          "kind": "circle";
-          "realm_id": string;
-          "circle_id": string;
         } | {
           "kind": "sidecar";
           "realm_id": string;
@@ -7843,10 +7591,6 @@ export type CommitStreamHead = {
     "kind": "realm";
     "realm_id": string;
   } | {
-    "kind": "circle";
-    "realm_id": string;
-    "circle_id": string;
-  } | {
     "kind": "sidecar";
     "realm_id": string;
     "sidecar_id": string;
@@ -7862,15 +7606,11 @@ export type CommitStreamHead = {
 export type EventAdmissionSubmission = {
   "event": {
     "event_id": string;
-    "kind": "ak.account_data.set" | "ak.agent.action_approve" | "ak.agent.action_reject" | "ak.agent.action_request" | "ak.agent.draft.propose" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.circle.archive" | "ak.circle.create" | "ak.circle.history_access" | "ak.circle.member.state" | "ak.circle.restore" | "ak.circle.tombstone" | "ak.circle.update" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.push_route" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.read_cursor.advance" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.realm_invite_link.accept";
+    "kind": "ak.account_data.set" | "ak.agent.action_approve" | "ak.agent.action_reject" | "ak.agent.action_request" | "ak.agent.draft.propose" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.push_route" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.create" | "ak.invite.revoke" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.read_cursor.advance" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.sidecar.context.attach" | "ak.sidecar.member.state" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update" | "ak.realm_invite_link.create" | "ak.realm_invite_link.revoke" | "ak.realm_invite_link.accept";
     "realm_id"?: string;
     "scope_ref": {
       "kind": "realm";
       "realm_id": string;
-    } | {
-      "kind": "circle";
-      "realm_id": string;
-      "circle_id": string;
     } | {
       "kind": "sidecar";
       "realm_id": string;
@@ -7969,10 +7709,6 @@ export type EventAdmissionSubmission = {
         "effective_scope": {
           "kind": "realm";
           "realm_id": string;
-        } | {
-          "kind": "circle";
-          "realm_id": string;
-          "circle_id": string;
         };
         "request_id": string;
       };
@@ -8019,10 +7755,6 @@ export type MlsGroupValue = {
   "effective_scope": {
     "kind": "realm";
     "realm_id": string;
-  } | {
-    "kind": "circle";
-    "realm_id": string;
-    "circle_id": string;
   } | {
     "kind": "sidecar";
     "realm_id": string;

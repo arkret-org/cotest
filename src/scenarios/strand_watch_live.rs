@@ -24,7 +24,6 @@ use crate::scenarios::human_device_producer_live::{
 use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 
 mod approval_matrix;
-mod circle_matrix;
 mod handoff_matrix;
 mod mute_matrix;
 mod owner_transfer;
@@ -1149,18 +1148,6 @@ async fn run_registered_watch_audit(
                 .connect_url,
             &realm,
             &strand,
-        )
-        .await?;
-        circle_matrix::run(
-            &alice,
-            &alice_account,
-            &bob,
-            &bob_account,
-            controller,
-            group.server(1),
-            group.server(0),
-            &realm,
-            &joining_revisions,
         )
         .await?;
     }

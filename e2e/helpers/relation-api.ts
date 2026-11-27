@@ -50,7 +50,6 @@ export function relationCreatePayload(args: {
   relationKind: string;
   fromRef: RelationEndpoint;
   toRef: RelationEndpoint;
-  scopeCircleId?: string;
   rank?: string;
   fields?: Record<string, unknown>;
   expectedCommitId?: string | null;
@@ -65,7 +64,6 @@ export function relationCreatePayload(args: {
     },
     expected_commit_id: args.expectedCommitId ?? null,
     relation: {
-      ...(args.scopeCircleId ? { scope_circle_id: args.scopeCircleId } : {}),
       relation_kind: args.relationKind,
       from_ref: args.fromRef,
       to_ref: args.toRef,

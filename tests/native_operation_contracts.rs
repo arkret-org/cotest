@@ -122,11 +122,6 @@ async fn account_erasure_retains_native_terminal_intent_and_physical_receipt() -
     cotest::scenarios::native_operation_contracts::account_erasure_status().await
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn circle_rotation_retains_actual_update_paths_welcome_and_original_replays()
--> anyhow::Result<()> {
-    cotest::scenarios::native_operation_contracts::circle_rotation().await
-}
 
 #[tokio::test(flavor = "multi_thread")]
 async fn mimi_proxy_download_retains_public_object_current_policy_and_provider_originals()

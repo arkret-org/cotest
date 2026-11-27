@@ -2150,12 +2150,6 @@ def applet_managed_configuration(evidence):
     check(evidence, require=require, digest=canonical_digest, decode=decoded_json)
 
 
-def circle_rotation(evidence):
-    from native_circle_rotation_proof import check
-    check(evidence, require=require, decode=decoded_json, digest=canonical_digest,
-          error_registry=read(ROOT / "arkret-spec/spec/v1/artifacts/registry/error-code-registry.json"))
-
-
 def mimi_proxy_download(evidence):
     from native_mimi_proxy_download_proof import check
     check(evidence, require=require, digest=canonical_digest, decode=decoded_json)
@@ -2166,7 +2160,7 @@ def peer_consent(evidence):
     check(evidence, require=require, digest=canonical_digest, decode=decoded_json)
 
 
-PROOFS = {"peer_consent": peer_consent, "circle_rotation": circle_rotation, "mimi_proxy_download": mimi_proxy_download, "account_erasure_status": account_erasure_status, "applet_managed_configuration": applet_managed_configuration, "push_gateway": push_gateway, "applet_installations": applet_installations, "call_invitation": call_invitation, "account_security_rotation": account_security_rotation, "peer_contacts": peer_contacts, "peer_keypackage_claims": peer_keypackage_claims,"account_identity_creation": account_identity_creation, "account_device_sessions": account_device_sessions,
+PROOFS = {"peer_consent": peer_consent, "mimi_proxy_download": mimi_proxy_download, "account_erasure_status": account_erasure_status, "applet_managed_configuration": applet_managed_configuration, "push_gateway": push_gateway, "applet_installations": applet_installations, "call_invitation": call_invitation, "account_security_rotation": account_security_rotation, "peer_contacts": peer_contacts, "peer_keypackage_claims": peer_keypackage_claims,"account_identity_creation": account_identity_creation, "account_device_sessions": account_device_sessions,
           "account_device_pairing": account_device_pairing, "account_policy_recovery": account_policy_recovery,
           "account_private_storage": account_private_storage, "mls_interop": mls_interop,
           "account_consent": account_consent,"identity_reservations":identity_reservations,

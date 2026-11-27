@@ -109,7 +109,7 @@
     {
       "source": "cotest/e2e/tests/messaging/discussion-upgrade.spec.ts",
       "target": "api_mls_migrations",
-      "symbol": "discussion_upgrade_api_migration",
+      "symbol": "realm_discussion_api_migration",
       "environment": "isolated_station",
       "legacy_case_count": 9,
       "legacy_projects": [
@@ -120,11 +120,7 @@
       "legacy_fully_implemented": false,
       "operation_ids": [
         "ak.self.events.command.submit.v1",
-        "ak.self.committed_event.read.scan.v1",
-        "ak.self.signal.command.send.v1",
-        "ak.self.signal.stream.subscribe.v1",
-        "ak.self.circle.command.create.v1",
-        "ak.self.circle.member.command.add.v1"
+        "ak.self.committed_event.read.scan.v1"
       ]
     },
     {
@@ -186,17 +182,6 @@
             "ak.self.events.command.submit.v1",
             "ak.self.committed_event.read.scan.v1",
             "ak.self.account.stream.subscribe.v1"
-          ],
-          "environment": "isolated_station"
-        },
-        {
-          "target": "api_mls_migrations",
-          "symbol": "private_marker_circle_scope_api_migration",
-          "operation_ids": [
-            "ak.self.read_cursor.command.advance.v1",
-            "ak.self.read_cursor.read.list.v1",
-            "ak.self.events.command.submit.v1",
-            "ak.self.committed_event.read.scan.v1"
           ],
           "environment": "isolated_station"
         }
@@ -593,20 +578,6 @@
       ]
     },
     {
-      "source": "cotest/e2e/tests/identity/circle-member.spec.ts",
-      "disposition": "duplicate_removed",
-      "replacements": [
-        {
-          "file": "cotest/src/scenarios/circle/member_strict_subset.rs",
-          "symbol": "member_strict_subset_run"
-        },
-        {
-          "file": "cotest/src/scenarios/circle/member_transition_rules.rs",
-          "symbol": "member_transition_rules_run"
-        }
-      ]
-    },
-    {
       "source": "cotest/e2e/tests/identity/contact-graph.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
@@ -748,7 +719,7 @@
       "replacements": [
         {
           "file": "cotest/tests/api_mls_migrations.rs",
-          "symbol": "discussion_upgrade_api_migration"
+          "symbol": "realm_discussion_api_migration"
         }
       ]
     },
@@ -780,10 +751,6 @@
         {
           "file": "cotest/tests/api_mls_migrations.rs",
           "symbol": "private_marker_encrypted_notification_api_migration"
-        },
-        {
-          "file": "cotest/tests/api_mls_migrations.rs",
-          "symbol": "private_marker_circle_scope_api_migration"
         }
       ]
     }

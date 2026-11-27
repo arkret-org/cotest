@@ -22,13 +22,13 @@
 //! Structural closure is taken from the types, never from the fixture: there is
 //! no Realm-global position and no per-Realm position to compare because
 //! [`RealmCommit`] declares neither member, and [`CommitStreamRef`] admits
-//! exactly the Realm, Circle and Sidecar streams.
+//! exactly the Realm and Sidecar streams.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context as _, Result, anyhow, bail, ensure};
 use arkret_hlc::Cursor;
-use arkret_identifiers::{CircleId, RealmCommitId, RealmId, SidecarId};
+use arkret_identifiers::{RealmCommitId, RealmId, SidecarId};
 use arkret_state::{
     AppendOutcome, AuthorityCommitStore, CommitLogError, MemoryAuthorityCommitStore,
 };
@@ -65,7 +65,7 @@ pub fn run_sync_fixture_suite() -> Result<()> {
 
     verify_subscription_has_no_aggregate_position(&fixture)?;
     verify_commit_carries_no_global_or_realm_position()?;
-    verify_stream_ref_is_closed_to_three_streams()?;
+    verify_stream_ref_is_closed_to_registered_streams()?;
 
     let tails = parse_stream_tails(&fixture)?;
     verify_every_stream_class_is_exercised(&tails)?;
@@ -289,15 +289,9 @@ fn verify_commit_carries_no_global_or_realm_position() -> Result<()> {
 }
 
 /// `CommitStreamRef` is a closed tagged union. Round-trip each declared kind and
-/// prove a fourth kind is unrepresentable on the wire.
-fn verify_stream_ref_is_closed_to_three_streams() -> Result<()> {
+/// prove an unknown kind is unrepresentable on the wire.
+fn verify_stream_ref_is_closed_to_registered_streams() -> Result<()> {
     let realm_id = fixture_realm_id()?;
-    let circle = CommitStreamRef::Circle {
-        realm_id: realm_id.clone(),
-        circle_id: CircleId::new(
-            "ak:circle:AUD2WOhX-Xh47vBHtRJPMRfXRQXGiOWQqOrJGJnE8CaI".to_owned(),
-        )?,
-    };
     let sidecar = CommitStreamRef::Sidecar {
         realm_id: realm_id.clone(),
         sidecar_id: SidecarId::new(
@@ -309,7 +303,7 @@ fn verify_stream_ref_is_closed_to_three_streams() -> Result<()> {
     };
 
     let mut kinds = BTreeSet::new();
-    for stream_ref in [&realm, &circle, &sidecar] {
+    for stream_ref in [&realm, &sidecar] {
         let value = serde_json::to_value(stream_ref)?;
         let kind = value
             .get("kind")
@@ -328,12 +322,12 @@ fn verify_stream_ref_is_closed_to_three_streams() -> Result<()> {
         ensure!(kinds.insert(kind), "two stream kinds collided");
     }
     ensure!(
-        kinds.iter().map(String::as_str).collect::<Vec<_>>() == ["circle", "realm", "sidecar"],
+        kinds.iter().map(String::as_str).collect::<Vec<_>>() == ["realm", "sidecar"],
         "CommitStreamRef kinds drifted: {kinds:?}"
     );
 
-    // A Realm-global chain would need a fourth, Realm-wide stream that is not
-    // any of the three. It cannot be deserialized.
+    // A Realm-global chain would need an additional Realm-wide stream that is not
+    // a registered kind. It cannot be deserialized.
     let global: std::result::Result<CommitStreamRef, _> = serde_json::from_value(json!({
         "kind": "realm_global",
         "realm_id": realm_id,
@@ -343,11 +337,11 @@ fn verify_stream_ref_is_closed_to_three_streams() -> Result<()> {
         "a Realm-global commit stream must not be representable"
     );
 
-    // The three streams are distinct keys even under one Realm.
-    let distinct: BTreeSet<CommitStreamRef> = [realm, circle, sidecar].into_iter().collect();
+    // The streams are distinct keys even under one Realm.
+    let distinct: BTreeSet<CommitStreamRef> = [realm, sidecar].into_iter().collect();
     ensure!(
-        distinct.len() == 3,
-        "Realm, Circle and Sidecar streams must be three independent keys"
+        distinct.len() == 2,
+        "Realm and Sidecar streams must be independent keys"
     );
     Ok(())
 }
@@ -381,19 +375,6 @@ fn parse_stream_ref(value: &Value) -> Result<(CommitStreamRef, ScopeRef)> {
             },
             ScopeRef::Realm { realm_id },
         ),
-        "circle" => {
-            let circle_id = CircleId::new(required_str(value, "circle_id")?.to_owned())?;
-            (
-                CommitStreamRef::Circle {
-                    realm_id: realm_id.clone(),
-                    circle_id: circle_id.clone(),
-                },
-                ScopeRef::Circle {
-                    realm_id,
-                    circle_id,
-                },
-            )
-        }
         "sidecar" => {
             let sidecar_id = SidecarId::new(required_str(value, "sidecar_id")?.to_owned())?;
             (
@@ -462,14 +443,13 @@ fn verify_every_stream_class_is_exercised(tails: &[DeclaredTail]) -> Result<()> 
     for tail in tails {
         seen.insert(match tail.stream_ref {
             CommitStreamRef::Realm { .. } => "realm",
-            CommitStreamRef::Circle { .. } => "circle",
             CommitStreamRef::Sidecar { .. } => "sidecar",
             // `CommitStreamRef` is `#[non_exhaustive]`; a fourth stream kind is
             // exactly the Realm-global chain this suite exists to rule out.
             _ => bail!("an unregistered commit stream kind reached the account stream"),
         });
     }
-    for kind in ["realm", "circle", "sidecar"] {
+    for kind in ["realm", "sidecar"] {
         ensure!(
             seen.contains(kind),
             "the fixture must exercise the independent {kind} stream"
@@ -1057,7 +1037,6 @@ fn verify_single_tail_recovery(name: &str, case: &Value) -> Result<()> {
     ensure!(
         match stream_ref {
             CommitStreamRef::Realm { .. } => affected_kind == "realm",
-            CommitStreamRef::Circle { .. } => affected_kind == "circle",
             CommitStreamRef::Sidecar { .. } => affected_kind == "sidecar",
             _ => false,
         },

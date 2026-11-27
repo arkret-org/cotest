@@ -128,7 +128,6 @@ pub(crate) fn canonical_device_id(input: &str) -> String {
         "dev_missing" => "00000000dead",
         "dev_other" => "0000000000f0",
         "dev_outsider" => "00000000e005",
-        "dev_probe_circle" => "00000000e007",
         "dev_probe_realm" => "00000000e006",
         "dev_realm_only" => "00000000e002",
         "dev_x" => "0000000000e4",

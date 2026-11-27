@@ -6,7 +6,6 @@ use arkret_wire::{
 
 use super::*;
 use crate::harness::{CanonicalJsonBody, expect_json};
-use crate::scenarios::circle_poll_scope_live::{circle_create, circle_event, join_circle};
 
 mod privacy;
 mod withheld;
@@ -33,9 +32,8 @@ fn assert_hidden_private_stream(
         "hidden private stream disclosed its floor"
     );
     let id = match stream {
-        CommitStreamRef::Circle { circle_id, .. } => circle_id.as_str(),
         CommitStreamRef::Sidecar { sidecar_id, .. } => sidecar_id.as_str(),
-        _ => bail!("private-scope assertion needs a Circle or Sidecar"),
+        _ => bail!("private-scope assertion needs a Sidecar"),
     };
     ensure!(
         !serde_json::to_string(snapshot)?.contains(id),
@@ -140,27 +138,7 @@ async fn run_matrix() -> Result<()> {
     }
     let realm = RealmId::new(fixture.realm.clone())?;
     let actor = ActorId::account(fixture.alice_account.clone());
-    let mut circles = Vec::new();
-    for index in 0..2 {
-        let circle = circle_create(
-            &fixture.alice,
-            &fixture.realm,
-            &actor,
-            &format!("Snapshot private {index}"),
-            &format!("Private-{index}"),
-        )
-        .await?;
-        join_circle(&fixture.alice, &fixture.realm, &circle, &actor).await?;
-        circles.push(circle);
-    }
-    let target = CommitStreamRef::Circle {
-        realm_id: realm.clone(),
-        circle_id: circles[0].clone(),
-    };
-    let unrelated = CommitStreamRef::Circle {
-        realm_id: realm.clone(),
-        circle_id: circles[1].clone(),
-    };
+    let target = CommitStreamRef::Realm { realm_id: realm.clone() };
     let sidecar = private_sidecar(&fixture.alice, &fixture.alice_account, &realm).await?;
     let issued = snapshot(&fixture.alice, &realm).await?;
     ensure!(issued.governance_generation == 0);
@@ -170,26 +148,9 @@ async fn run_matrix() -> Result<()> {
             .iter()
             .any(|h| h.stream_ref == target)
     );
-    ensure!(
-        issued
-            .visible_stream_heads
-            .iter()
-            .any(|h| h.stream_ref == unrelated)
-    );
-    ensure!(
-        issued
-            .visible_stream_heads
-            .iter()
-            .any(|head| head.stream_ref == sidecar)
-    );
+    assert_hidden_private_stream(&issued, &sidecar)?;
     let outsider = snapshot(&fixture.bob, &realm).await?;
-    ensure!(
-        !outsider
-            .visible_stream_heads
-            .iter()
-            .any(|head| head.stream_ref == sidecar)
-    );
-    assert_hidden_private_stream(&outsider, &target)?;
+    ensure!(outsider.visible_stream_heads.iter().any(|head| head.stream_ref == target));
     assert_hidden_private_stream(&outsider, &sidecar)?;
     let opening_join = issued.current_state_entries.iter().find_map(|row| {
         let arkret_wire::CurrentState::Value { selector, revision, .. } = row;
@@ -228,7 +189,6 @@ async fn run_matrix() -> Result<()> {
                 .is_some_and(|signed| signed.account_id == fixture.alice_account
                     && signed.stream_ref == target)
     );
-    assert_hidden_private_stream(&stream_history, &unrelated)?;
     assert_hidden_private_stream(&stream_history, &sidecar)?;
     let history_bytes = arkret_canonical::canonical_json_bytes(&stream_history)?;
     let original_bytes = arkret_canonical::canonical_json_bytes(&issued)?;
@@ -238,7 +198,7 @@ async fn run_matrix() -> Result<()> {
         direction: StreamScanDirection::After(None),
         limit: 2,
     };
-    privacy::assert_hidden_scans(&fixture, &[target.clone(), sidecar.clone()], 0).await?;
+    privacy::assert_hidden_scans(&fixture, std::slice::from_ref(&sidecar), 0).await?;
 
     let (change, changed) = {
         let (old, new) = fixture.group.server_pair_mut(0, 2);
@@ -277,17 +237,12 @@ async fn run_matrix() -> Result<()> {
             && current.signature.verification_method != issued.signature.verification_method,
         "head did not switch to the verified successor"
     );
-    ensure!(
-        current
-            .visible_stream_heads
-            .iter()
-            .any(|head| head.stream_ref == sidecar)
-    );
+    assert_hidden_private_stream(&current, &sidecar)?;
     let outsider_after_handoff = snapshot(&fixture.bob, &realm).await?;
     ensure!(outsider_after_handoff.governance_generation == 1);
-    assert_hidden_private_stream(&outsider_after_handoff, &target)?;
+    ensure!(outsider_after_handoff.visible_stream_heads.iter().any(|head| head.stream_ref == target));
     assert_hidden_private_stream(&outsider_after_handoff, &sidecar)?;
-    privacy::assert_hidden_scans(&fixture, &[target.clone(), sidecar.clone()], 2).await?;
+    privacy::assert_hidden_scans(&fixture, std::slice::from_ref(&sidecar), 2).await?;
     let historical = fixture
         .alice
         .sdk()
@@ -379,48 +334,6 @@ async fn run_matrix() -> Result<()> {
     );
     withheld::run(&fixture, &successor.connect_url).await?;
 
-    let leave = circle_event(&fixture.alice, &fixture.realm, &circles[1], EventKind::CircleMemberState,
-        json!({"circle_id":circles[1],"member_id":actor,"membership":"leave","expected_membership":"join"})).await?;
-    submit_and_expect_commit(&fixture.alice, &fixture.alice_account, ALICE_DEVICE, &leave).await?;
-    let after = snapshot(&fixture.alice, &realm).await?;
-    ensure!(
-        after
-            .visible_stream_heads
-            .iter()
-            .any(|h| h.stream_ref == target)
-    );
-    ensure!(
-        after
-            .visible_stream_heads
-            .iter()
-            .any(|head| head.stream_ref == sidecar)
-    );
-    ensure!(
-        !after
-            .visible_stream_heads
-            .iter()
-            .any(|h| h.stream_ref == unrelated)
-    );
-    let refused = authority
-        .exact_snapshot(&description, &realm, &issued.snapshot_id)
-        .await;
-    ensure!(
-        matches!(
-            refused,
-            Err(garth::Error::ExactSnapshotRefused(
-                garth::ExactSnapshotRefusal::Unavailable
-            ))
-        ),
-        "unrelated scope revocation must return the registered whole-original unavailable result: {refused:?}"
-    );
-    ensure!(
-        arkret_canonical::canonical_json_bytes(
-            &authority
-                .exact_snapshot(&description, &realm, &stream_history.snapshot_id)
-                .await?
-        )? == history_bytes,
-        "unrelated scope loss must not withdraw the target's independent original"
-    );
     let target_page = fixture
         .alice
         .sdk()
@@ -432,7 +345,7 @@ async fn run_matrix() -> Result<()> {
         "target stream lost its independent read authority"
     );
     let sidecar_request = StreamScanRequestBody {
-        realm_id: realm.clone(),
+        realm_id: sidecar.realm_id().clone(),
         stream_ref: sidecar.clone(),
         direction: StreamScanDirection::After(None),
         limit: 10,
@@ -451,25 +364,9 @@ async fn run_matrix() -> Result<()> {
         .await?;
     let recovered = snapshot(&fixture.alice, &realm).await?;
     ensure!(recovered.governance_generation == 1);
-    ensure!(
-        recovered
-            .visible_stream_heads
-            .iter()
-            .any(|head| head.stream_ref == target)
-            && recovered
-                .visible_stream_heads
-                .iter()
-                .any(|head| head.stream_ref == sidecar),
-        "successor restart lost a still-readable private stream"
-    );
-    ensure!(matches!(
-        authority
-            .exact_snapshot(&description, &realm, &issued.snapshot_id)
-            .await,
-        Err(garth::Error::ExactSnapshotRefused(
-            garth::ExactSnapshotRefusal::Unavailable
-        ))
-    ));
+    ensure!(recovered.visible_stream_heads.iter().any(|head| head.stream_ref == target));
+    assert_hidden_private_stream(&recovered, &sidecar)?;
+    ensure!(authority.exact_snapshot(&description, &realm, &issued.snapshot_id).await? == issued);
     fixture
         .group
         .server_mut(0)
@@ -484,7 +381,7 @@ async fn run_matrix() -> Result<()> {
         "Account Station cold restart lost the issued independent history original"
     );
     println!(
-        "[stream-history-snapshot] three_station_processes=1 three_databases=1 private_circle_and_sidecar=1 complete_private_handoff=1 generation=1 original_old_signature_verified=1 old_head_refused=1 unrelated_circle_revoked=1 target_and_sidecar_still_readable=1 full_original_unavailable=1 independent_target_original_retained=1 successor_restart=1 account_station_restart=1"
+        "[stream-history-snapshot] three_station_processes=1 three_databases=1 sidecar_hidden_from_project=1 generation=1 original_old_signature_verified=1 old_head_refused=1 realm_and_personal_sidecar_still_readable=1 full_original_retained=1 independent_target_original_retained=1 successor_restart=1 account_station_restart=1"
     );
     Ok(())
 }

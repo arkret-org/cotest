@@ -1211,7 +1211,7 @@ pub async fn run_local_message_and_account_cursor_recovery_live() -> Result<()> 
     let accepted_strand: arkret_models_collaboration::objects::strand::Strand =
         serde_json::from_value(accepted_strand)?;
     ensure!(
-        accepted_strand.realm_id == realm_id && accepted_strand.scope_circle_id.is_none(),
+        accepted_strand.realm_id == realm_id,
         "default target is not the accepted Realm-scoped Strand"
     );
     let directory = tempfile::tempdir()?;

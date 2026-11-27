@@ -116,6 +116,7 @@ pub fn run_profile_requirement_gate_suite() -> Result<()> {
     // neither may reappear as a declared profile.
     for retired in [
         "ak.profile.e2ee_relaxed.v1",
+        "ak.profile.circle_conformance.v1",
         "ak.profile.mls_governance_binding.full.v1",
     ] {
         if matrix.declared_profiles.contains(retired) || matrix.requirements.contains_key(retired) {
@@ -128,29 +129,6 @@ pub fn run_profile_requirement_gate_suite() -> Result<()> {
         .ok_or_else(|| anyhow!("missing chat_mvp requirement block"))?;
     if chat.required_features.contains("discussion_history_access") {
         bail!("chat feature_discovery evidence leaked into runtime required_features");
-    }
-
-    let circle = matrix
-        .requirements
-        .get("ak.profile.circle_conformance.v1")
-        .ok_or_else(|| anyhow!("missing circle conformance requirement block"))?;
-    if !circle
-        .required_fixtures
-        .contains("circle-scope-fixture.json")
-    {
-        bail!("circle conformance requirement block missing required fixture");
-    }
-    if !circle
-        .required_capability_actions
-        .contains("ak.circle.create")
-    {
-        bail!("circle conformance requirement block missing capability action");
-    }
-    if !circle
-        .must_requirement_blocks
-        .contains("submit_payload_must")
-    {
-        bail!("circle conformance requirement block missing submit_payload_must");
     }
 
     Ok(())

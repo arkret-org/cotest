@@ -11,15 +11,11 @@ pub(super) async fn assert_hidden_scans(
         arkret_wire::EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [0xe7; 32]);
     for stream in streams {
         let missing = match stream {
-            CommitStreamRef::Circle { realm_id, .. } => CommitStreamRef::Circle {
-                realm_id: realm_id.clone(),
-                circle_id: arkret_wire::CircleId::from_event_id(&unknown),
-            },
             CommitStreamRef::Sidecar { realm_id, .. } => CommitStreamRef::Sidecar {
                 realm_id: realm_id.clone(),
                 sidecar_id: arkret_wire::SidecarId::from_event_id(&unknown),
             },
-            _ => bail!("private scan requires a Circle or Sidecar"),
+            _ => bail!("private scan requires a Sidecar"),
         };
         for peer in [false, true] {
             let mut failures = Vec::new();
@@ -48,18 +44,7 @@ pub(super) async fn assert_hidden_scans(
                     ensure!(value["type"] == "https://arkret.org/problems/capability_denied");
                     value
                 } else {
-                    // Circle replicas require a held opening proof. Native
-                    // Sidecars first require independent controller/recipient
-                    // authority; the parent Realm cannot grant that authority.
-                    let (status, code) = match stream {
-                        CommitStreamRef::Circle { .. } => {
-                            (StatusCode::SERVICE_UNAVAILABLE, "temporarily_unavailable")
-                        }
-                        CommitStreamRef::Sidecar { .. } => {
-                            (StatusCode::FORBIDDEN, "capability_denied")
-                        }
-                        _ => unreachable!(),
-                    };
+                    let (status, code) = (StatusCode::FORBIDDEN, "capability_denied");
                     let value = expect_json(
                         fixture
                             .bob
@@ -90,7 +75,7 @@ pub(super) async fn assert_hidden_scans(
         }
     }
     println!(
-        "[2133-private-scan] governor_index={governor} circle_and_sidecar=1 member_circle_unproved_503=1 member_sidecar_denied_403=1 peer_denied_403=1 unknown_matches_hidden=1 zero_physical_pages=1"
+        "[2133-private-scan] governor_index={governor} member_sidecar_denied_403=1 peer_denied_403=1 unknown_matches_hidden=1 zero_physical_pages=1"
     );
     Ok(())
 }

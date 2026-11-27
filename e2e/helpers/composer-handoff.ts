@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
-/** Ordinary Realm/Circle/Direct sends clear the draft before enqueueing the original.
+/** Ordinary Realm/Direct sends clear the draft before enqueueing the original.
  * Agent Sidecar activation has its own pending command and is intentionally separate.
  */
 export async function submitOrdinaryComposerDraft(scope: Page | Locator, original: string,

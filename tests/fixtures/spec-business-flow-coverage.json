@@ -286,11 +286,10 @@
     },
     {
       "id": "contact_realm_collaboration",
-      "title": "Contacts, circles, realms, consent, authorization, and moderation",
+      "title": "Contacts, realms, consent, authorization, and moderation",
       "status": "implemented",
       "surfaces": [
         "contact_lifecycle",
-        "circle_management",
         "realm_governance_links",
         "realm_read",
         "realm_object_read",
@@ -320,24 +319,6 @@
           "operation_id": "ak.self.contact.command.tombstone.v1",
           "surfaces": [
             "contact_lifecycle"
-          ]
-        },
-        {
-          "operation_id": "ak.self.circle.command.create.v1",
-          "surfaces": [
-            "circle_management"
-          ]
-        },
-        {
-          "operation_id": "ak.self.circle.member.command.add.v1",
-          "surfaces": [
-            "circle_management"
-          ]
-        },
-        {
-          "operation_id": "ak.self.circle.member.resource.delete.v1",
-          "surfaces": [
-            "circle_management"
           ]
         },
         {
@@ -390,14 +371,6 @@
           "markers": [
             "ak.self.contact.command.request.v1",
             "ak.self.contact.command.respond.v1"
-          ]
-        },
-        {
-          "kind": "ordinary",
-          "path": "../coland/crates/http/src/routing/circles.rs",
-          "markers": [
-            "ak.self.circle.command.create.v1",
-            "ak.self.circle.member.command.add.v1"
           ]
         },
         {

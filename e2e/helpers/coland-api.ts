@@ -346,7 +346,6 @@ export function typedId(kind: string): string {
       "audit_session",
       "audit_release",
       "call",
-      "circle",
       "sidecar",
       "strand",
       "event",
@@ -2237,7 +2236,7 @@ export async function submitSignedEventApi(
 /// The commit the Station returns must admit the exact Event that was
 /// submitted, into the one stream that Event's scope names.
 ///
-/// `CommitStreamRef` is closed to `realm` / `circle` / `sidecar`; there is no
+/// `CommitStreamRef` is closed to `realm` / `sidecar`; there is no
 /// Realm-global chain and no Realm-global position, so the only ordering the
 /// outcome may carry is `stream_position` inside `stream_ref`.
 export function assertAuthoritySubmitOutcome(
@@ -2259,7 +2258,7 @@ export function assertAuthoritySubmitOutcome(
   const streamRef = commit.stream_ref as Record<string, unknown> | undefined;
   const kind = stringValue(streamRef?.kind);
   expect(
-    ["realm", "circle", "sidecar"],
+    ["realm", "sidecar"],
     `${context}: unregistered commit stream kind ${String(kind)}`,
   ).toContain(kind);
   expect(
@@ -2307,17 +2306,17 @@ export function commitStreamRefForScope(
     throw new Error("an Event outside Realm genesis carries its realm_id");
   }
   switch (stringValue(scope?.kind)) {
-    case "circle":
-      return { kind: "circle", realm_id: realmId, circle_id: scope!.circle_id };
     case "sidecar":
       return {
         kind: "sidecar",
         realm_id: realmId,
         sidecar_id: scope!.sidecar_id,
       };
-    default:
-      // `realm` and `realm_genesis` both commit into the Realm stream.
+    case "realm":
+    case "realm_genesis":
       return { kind: "realm", realm_id: realmId };
+    default:
+      throw new Error("cannot derive the commit stream from an unregistered Event scope");
   }
 }
 
@@ -2426,7 +2425,7 @@ function rememberPublicationEvidence(
 /// The current head of one independent commit stream.
 ///
 /// `ak.self.committed_event.read.scan.v1` returns accepted `{commit, event}` pairs in
-/// stream order; the last one is the head. A Realm, each Circle and each
+/// stream order; the last one is the head. Each Realm and each
 /// Sidecar own separate linear streams, so a head only ever names its own.
 export async function readCommitStreamHeadApi(
   request: APIRequestContext,

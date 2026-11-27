@@ -139,7 +139,6 @@
         "arkret-spec/spec/v1/zh/sync/current-state.md",
         "arkret-spec/spec/v1/zh/sync/privacy-preserving-search.md",
         "arkret-spec/spec/v1/zh/crypto-media/device-lifecycle.md",
-        "arkret-spec/spec/v1/zh/models/circle.md",
         "arkret-spec/spec/v1/zh/models/strand-and-message.md",
         "arkret-spec/spec/v1/zh/models/event-and-patch.md",
         "arkret-spec/spec/v1/artifacts/registry/current-state-registry.json",
@@ -272,7 +271,7 @@
           "path": "cotest/crates/inkson-client-tests/tests/client_sync_production_live.rs",
           "symbol": "sidecar_checkpoint_cases_use_the_actual_account_driver",
           "kind": "live",
-          "covers": "真实Station Circle／Sidecar非空依赖与tail、exact GET withheld／503拒绝时root／cursor／current不变，实际SQLite事务失败／旧cut恢复、新进程读回与23个canonical Sync case；不证明真实容量或完整native/browser搜索会话矩阵"
+          "covers": "真实Station Sidecar非空依赖与tail、exact GET withheld／503拒绝时root／cursor／current不变，实际SQLite事务失败／旧cut恢复、新进程读回与23个canonical Sync case；不证明真实容量或完整native/browser搜索会话矩阵"
         },
         {
           "path": "inkson/src/views/global_search/session_tests.rs",
@@ -312,15 +311,15 @@
         },
         {
           "path": "inkson/src/state/current_index/search.rs",
-          "symbol": "search_circle_current_scope_survives_archive_but_not_terminal_or_missing_evidence",
+          "symbol": "search_requires_active_strand_and_current_realm_evidence",
           "kind": "product",
-          "covers": "native encrypted SQLite: shared signed originals/cuts; active and archived exact original remains readable, tombstone/missing/wrong Circle id/Realm/schema/source suppress cached originals live and after reopen; bounded production candidate filter, not full UI or live Station admission"
+          "covers": "native encrypted SQLite: shared signed originals/cuts; active Strand with matching Realm evidence remains readable; archived or missing records suppress results and inconsistent signed sources fail live and after reopen; bounded production candidate filter, not full UI or live Station admission"
         },
         {
           "path": "inkson/tests/wasm_current_index.rs",
-          "symbol": "search_circle_current_scope_survives_archive_but_not_terminal_or_missing_evidence",
+          "symbol": "search_requires_active_strand_and_current_realm_evidence",
           "kind": "product",
-          "covers": "browser IndexedDB: shared signed originals/cuts; active and archived exact original remains readable, tombstone/missing/wrong Circle id/Realm/schema/source suppress cached originals live and after reopen; bounded production candidate filter, not full UI or live Station admission"
+          "covers": "browser IndexedDB: shared signed originals/cuts; active Strand with matching Realm evidence remains readable; archived or missing records suppress results and inconsistent signed sources fail live and after reopen; bounded production candidate filter, not full UI or live Station admission"
         },
         {
           "path": "inkson/src/state/current_index/search.rs",
@@ -440,7 +439,7 @@
       "engineering_checks": [],
       "remaining_scenarios": [
         "1／100／1000 Realm真实服务端与实机首屏、UI长任务指标；类型编译、索引微基准与全库library通过均不是该容量验收。",
-        "补齐正式搜索入口当前读取授权的同来源native／browser负例矩阵：缺当前cut、错误Event／Commit／actor／scope／Strand、错账号设备、撤权及Circle成员撤权／父join变化均不释放正文。Account／独立stream候选与Circle对象当前证据门已实现，完整入口矩阵仍须对照。",
+        "补齐正式搜索入口当前读取授权的同来源native／browser负例矩阵：缺当前cut、错误Event／Commit／actor／scope／Strand、错账号设备、Realm 成员撤权及重新加入均不释放正文。Account／独立stream候选与 Strand 当前证据检查已实现，完整入口矩阵仍须对照。",
         "完整搜索负例与生命周期矩阵：history收紧、适用retention的披露撤下／恢复、缺密钥／未验证crypto，以及借公共Strand定位私密Sidecar和修订链的完整浏览器展示；Message当前撤回终态、最新revision的同cut签名carrier绑定／补齐恢复及合法Policy求值／时间窗已实现。现行scope-settings §4.3未定义通用消息TTL，Policy.expires_at是策略有效期，不能据此发明消息expiry字段或期限求解器。",
         "补齐完整holder／Device／session搜索授权入口的同来源native／browser正负矩阵，尤其浏览器异步晚到、会话／Device replacement及完整holder授权证据链；原生正式hook已完成的到期／续期／替换晚到不重复列为待实现，但不代替全入口对照。"
       ]
@@ -765,7 +764,7 @@
         "**ATT-01 需求门。** 渲染含文件/音视频附件的时间线但不点击下载/播放时，附件body Range为0；图片/预览仅进入明确视口/有界预取范围后加载，屏外附件body Range为0。LongText显示已认证前缀，首次需要完整正文时再加载，不能丢失原语义。取消、切换目标、组件卸载后不继续无需求下载；共享任务仍有其它合法消费者时继续，失败/取消有可重试UI而不陷入永久loading。",
         "**ATT-02 跨实例复用。** 同一账户/设备/会话内两个合法展示实例同时请求同一个确切附件，只发一组等价Blob下载；已验证完成后卸载重挂载不重复传输完整密文。复用key绑定完整账户/Station、Device、认证source Event/scope、descriptor/内容承诺及所需MLS provenance；同blob ref不同授权来源不能共享授权结论，错账号/旧会话/撤权/withheld/redaction/current失效拒绝释放。只共享同cut已验证不可变材料，真正需要的新授权取材照常执行。密文缓存有容量、清理和回收边界，未验证/损坏数据不作为完整cache命中。",
         "**ATT-03 Range效率与内存。** 不改AEAD段大小而合并相邻HTTP Range或使用现有流式响应，在固定默认256 KiB明文段、64 MiB明文对象上，完整正常下载最多64个Blob body请求（含重定向/额外HEAD应分别报告；故障重试另计），不再每段固定一次往返。Range偏移/长度按SDK实际密文段长度计算并包含每段AEAD tag，不能把四个256 KiB明文段误当恰好1 MiB密文；SUT合法容量须覆盖该对象的完整密文及段开销。同时保持缓冲/并发有界、不全文件常驻内存。206/Content-Range、字节数、段序、末段、AEAD及整体digest分别验证；同对象网络中断按明确阶段保留或丢弃临时字节，不能把未完整验证对象提交为完整缓存。恶意内容失败仍执行规范丢弃，不以复用保留其可展示字节。",
-        "**ATT-04 安全与artifact生命周期。** 正常Realm/Circle/Sidecar及合法历史epoch在当前读取授权下可用；撤权、Device/session替换、late join不可读历史、错source/descriptor/group-state、段篡改/重排/重复/缺末段/整体digest不符均无完整预览或可下载成品。若提供增量播放，逐段/整体状态明确分离，失败终止并回收临时明文/URL；持久成品只有完整验证后发布。原消息多附件可合并同cut公共取材，但每份descriptor/KDF与授权绑定独立，拒绝一项不扩大其它项权限。",
+        "**ATT-04 安全与artifact生命周期。** 正常Realm/Sidecar及合法历史epoch在当前读取授权下可用；撤权、Device/session替换、late join不可读历史、错source/descriptor/group-state、段篡改/重排/重复/缺末段/整体digest不符均无完整预览或可下载成品。若提供增量播放，逐段/整体状态明确分离，失败终止并回收临时明文/URL；持久成品只有完整验证后发布。原消息多附件可合并同cut公共取材，但每份descriptor/KDF与授权绑定独立，拒绝一项不扩大其它项权限。",
         "**ATT-05 同源真实验证。** 为native与真实浏览器记录屏外/未点击、两个并发实例、同页重挂载、重进聊天、冷重启、显式清理、取消、中断恢复及换账号的请求数/密文字节/内存和首可见时间；包含小图片、64 MiB多段文件、音视频及LongText。运行真实双Device加密发送/接收、历史及篡改负例，复用0805原关键断言；浏览器使用正式供给和同源WASM，不把本地fixture或下载次数减少当作真实授权通过。确认没有把Blob迁到WebSocket、presign或未登记端点。"
       ]
     },
@@ -942,7 +941,7 @@
         "root作为现有secret_storage typed item、公开root索引与原签protection精确匹配；原件、blob、根包、coverage原子耐久，失败零接纳；PCR从genesis无损保管全部原件与证明。分页完整性独立核最新可信cut，拒绝缺条、重复、错scope／basis、少根、旧前缀及回滚。 固定256条coverage页且仅末页可短，根块仅default backup-HPKE、单独aead.enc；最后充分根包不可普通删除，recipient轮换先完整重封装并保存原根替代映射。",
         "`ak.mls.history_grant`经现有Event提交／读取交付，准确选择原正文或附件；发送与领取均核current权限。部分／开放epoch仅DEK，完整封闭且全获权epoch才可整根。撤销、过期、错recipient／HPKE key、跨scope拒绝；新成员真实解开全部获权原件才history-ready。 先由exact recipient自签accepted history_request；grant逐字绑定request、HPKE enc||ct||tag及header，拒绝任意公钥／非canonical／低阶DH。 按正式2222从原Event／已认证解密视图定位正文、metadata及附件；单项附件DEK直接验commitment及原AAD，不要求R、不再次根KDF，父正文key独立获权，缺descriptor／父key保持未完成。",
         "首次启用校验同一24词派生recovery-proof与backup HPKE公钥，空BIP39附加passphrase、accepted充分policy，不要求另一文件、旧端secret或在线批准者；空本地状态恢复个人原PCR全历史。恢复旧视图不安装旧授权为current，不借first-device unsupported active-series分支。 换代后按current-device content_history原签意图及fresh≤300秒challenge逐对象读旧根；identity session完成／过期后可续传，不受普通64对象桶截断，旧端不复活。",
-        "generation CAS＋replacement授权＋session消费原子提交，所有旧设备/session/队列/KeyPackage即时fence。完整安全库存包含空群及PCR／Realm／Circle／Sidecar／Direct，防并发新增遗漏；跨站义务耐久、重试和断点对账，不跳不可达目标。 库存typed preimage从完整native join/Add/consume/claim/outgoing-intent账本冻结，pending先对账并fence并发新membership；cleanup逐scope与原库存全序相等，物料Blob在prepare时即私密ACL。",
+        "generation CAS＋replacement授权＋session消费原子提交，所有旧设备/session/队列/KeyPackage即时fence。完整安全库存包含空群及PCR／Realm／Sidecar／Direct，防并发新增遗漏；跨站义务耐久、重试和断点对账，不跳不可达目标。 库存typed preimage从完整native join/Add/consume/claim/outgoing-intent账本冻结，pending先对账并fence并发新membership；cleanup逐scope与原库存全序相等，物料Blob在prepare时即私密ACL。",
         "仍有参与资格的scope，External Commit仅原joined Actor的已接纳replacement沿exact base进入，验证recovery_binding与库存；每个winning Commit保存external_pub GroupInfo及同epoch tree。真实Remove全部旧leaf、保留其他Actor，期间全部发送者受业务屏障；同base只一winner。 origin先签exact端点／method／授权／Event／base／库存及完整native service来源，governor后定committed_at及fact摘要；self禁止自报source，peer与本地治理均缺来源零接纳。",
         "recovery roster保留原Commit／covering RealmCommit／native历史producer fact，独立own Station验证后投影digest-bound公钥，客户端再核原签和RFC path／replacement key；Agent不伪装Device/Service，不伪造Add claim，不公开controller私有scope或PCR历史，不以current DID／治理manifest替代原来源。 Genesis/Add/recovery唯一全序，Add保留原双签；own Station独立核origin原签／native历史及最终fact字段衔接，客户端核真实NewMemberCommit path、无MemberMAC分支及两种wrapper共同2MiB／8条最长前缀预算。",
         "Agent历史保管有controller明确原签history_custody批准，备份主体Agent，cross-subject custodian policy及recipient引用准确；可信controller客户端解封后只向批准的新runtime密封Agent材料，24词／backup私钥／Human其它scope永不进入runtime。按原生supersedes授权集合替换，不套Human generation，不另provision身份。 custody required在immutable provision，Agent PCR首个依赖加密profile前完成首根耐久；runtime原生上传、不伪造Device，controller独享active pointer。既有list/challenge/unlock及scan/get/Blob必须按专用current_agent_history_custodian逐主体反枚举，另一controller／Human PCR／foreign scope均拒绝。",
@@ -1050,7 +1049,7 @@
         "**2036-C04**：在实际实现路径验证：exact duplicate 页可幂等消费；同身份异字节、缺页、乱序和不同冻结实例拼接拒绝。",
         "**2036-C05**：在实际实现路径验证：新增授权 stream 不被旧 frozen completeness 吞掉，旧 C 也不扩张到未经授权 scope。",
         "**2036-C06**：在实际实现路径验证：权限撤回、目标 redaction、治理换代及窗口丢失分别走原失败合同，不返回改写的原签 Snapshot。",
-        "**2036-C07**：在实际实现路径验证：无关 Realm/Circle 实时 head 前进不触发全账号重建；没有跨流 position 比较。",
+        "**2036-C07**：在实际实现路径验证：无关 Realm 实时 head 前进不触发全账号重建；没有跨流 position 比较。",
         "**2036-C08**：在实际实现路径验证：cursor 过期、撤销、外站误投、主体/设备/filter失配仍严格拒绝，不续期、不产生 ACK/业务副作用。",
         "**2036-C09**：在实际实现路径验证：RealmSnapshot 仍完整内联、预算不变；Account 帧分段/原子安装义务未被绕过。",
         "**2040-M01**：G01；root T 首授 required-finite，T+25h 原 root 新明确批准另一 GrantId；可在本次 TTL/审批/当前上界内通过；旧 grant 不续期。",
@@ -1158,7 +1157,7 @@
         "Inventory-only restored owner from upstream e8933b59. Source anchors identify its existing task and owning workspace manifests; no implementation, runtime/test execution or completed acceptance is claimed."
       ],
       "remaining_scenarios": [
-        "AC-C1：按精确 applet_id／service_id／effective_scope 展示安装记录、请求 scopes 与实际 accepted grants 的差异，跨 Circle／Realm 不串用范围、身份或结果。",
+        "AC-C1：按精确 applet_id／service_id／effective_scope 展示安装记录、请求 scopes 与实际 accepted grants 的差异，跨 Realm 不串用范围、身份或结果。",
         "AC-C2：revoke preview／outcome 显示真实范围、capability refs、受影响主体及部分完成／失败／待恢复；重试和刷新后从 accepted 结果恢复，不能统一显示成功。",
         "AC-C3：审计展示可追溯的原 Event 与 grant／revoke 明细、仅由正式来源可证明的 Bot／Ghost 管理及注册状态；材料缺失明确不可确认；widget 只显示允许公开的 ref、scope 与失效状态，不展示 secret token，不强制无 policy 安装制造 widget_policy_ref。",
         "AC-C4：实际安装／撤销／拒绝／恢复入口的浏览器验证覆盖跨 scope 隔离、原件来源与状态刷新，复用现有 SDK validator，未证材料明确不可确认。"

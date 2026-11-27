@@ -5,15 +5,7 @@ use cotest::scenarios::api_mls_migrations::MlsApiCase;
 /// Gating: requires prebuilt Coland and isolated PostgreSQL.
 /// Tier: mls-data-plane
 #[ignore = "requires prebuilt Coland and isolated PostgreSQL"]
-async fn private_marker_circle_scope_api_migration() -> Result<()> {
-    cotest::scenarios::mls_lifecycle_live::run_with_api_migration(MlsApiCase::CircleMarkers).await
-}
-
-#[tokio::test]
-/// Gating: requires prebuilt Coland and isolated PostgreSQL.
-/// Tier: mls-data-plane
-#[ignore = "requires prebuilt Coland and isolated PostgreSQL"]
-async fn discussion_upgrade_api_migration() -> Result<()> {
+async fn realm_discussion_api_migration() -> Result<()> {
     cotest::scenarios::mls_lifecycle_live::run_with_api_migration(MlsApiCase::Discussion).await
 }
 

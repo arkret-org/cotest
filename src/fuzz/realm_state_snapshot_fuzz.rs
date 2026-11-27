@@ -44,7 +44,7 @@ pub struct FuzzRealmStateSnapshotInput {
     pub realm_id: String,
     pub authority_generation: u64,
     pub head_stream_kind: String,
-    pub head_circle_id: String,
+    pub head_sidecar_id: String,
     pub head_position: u64,
     pub head_commit_id: String,
     pub current_state_entries: ArbValue,
@@ -61,11 +61,7 @@ impl FuzzRealmStateSnapshotInput {
             "realm_id": self.realm_id,
             "authority_generation": (self.authority_generation).to_string(),
             "visible_stream_heads": [{
-                "stream_ref": {
-                    "kind": self.head_stream_kind,
-                    "realm_id": self.realm_id,
-                    "circle_id": self.head_circle_id,
-                },
+                "stream_ref": stream_ref(&self.head_stream_kind, &self.realm_id, &self.head_sidecar_id),
                 "stream_position": self.head_position,
                 "commit_id": self.head_commit_id,
             }],
@@ -73,11 +69,7 @@ impl FuzzRealmStateSnapshotInput {
             "retention_and_history_floor": {
                 "history_access": self.history_access,
                 "stream_floors": [{
-                    "stream_ref": {
-                        "kind": self.head_stream_kind,
-                        "realm_id": self.realm_id,
-                        "circle_id": self.head_circle_id,
-                    },
+                    "stream_ref": stream_ref(&self.head_stream_kind, &self.realm_id, &self.head_sidecar_id),
                     "oldest_position": self.floor_position,
                 }],
             },
@@ -111,7 +103,6 @@ pub struct FuzzRealmCommitInput {
     pub commit_id: String,
     pub realm_id: String,
     pub stream_kind: String,
-    pub circle_id: String,
     pub sidecar_id: String,
     pub stream_position: u64,
     pub previous_commit_ref: Option<String>,
@@ -127,12 +118,7 @@ impl FuzzRealmCommitInput {
         json!({
             "commit_id": self.commit_id,
             "realm_id": self.realm_id,
-            "stream_ref": {
-                "kind": self.stream_kind,
-                "realm_id": self.realm_id,
-                "circle_id": self.circle_id,
-                "sidecar_id": self.sidecar_id,
-            },
+            "stream_ref": stream_ref(&self.stream_kind, &self.realm_id, &self.sidecar_id),
             "stream_position": self.stream_position,
             "previous_commit_ref": self.previous_commit_ref,
             "event_ref": self.event_ref,
@@ -171,7 +157,7 @@ pub struct FuzzStreamScanOutcomeInput {
     pub truncated: bool,
     pub realm_id: String,
     pub stream_kind: String,
-    pub circle_id: String,
+    pub sidecar_id: String,
     pub after_position: Option<u64>,
     pub limit: u16,
 }
@@ -187,11 +173,7 @@ impl FuzzStreamScanOutcomeInput {
     fn request_json(&self) -> Value {
         json!({
             "realm_id": self.realm_id,
-            "stream_ref": {
-                "kind": self.stream_kind,
-                "realm_id": self.realm_id,
-                "circle_id": self.circle_id,
-            },
+            "stream_ref": stream_ref(&self.stream_kind, &self.realm_id, &self.sidecar_id),
             "after_position": self.after_position,
             "limit": self.limit,
         })
@@ -216,4 +198,12 @@ pub fn fuzz_stream_scan_outcome(data: &[u8]) -> Result<(), String> {
             let _ = outcome.validate_for_request(&request);
         }
     })
+}
+
+fn stream_ref(kind: &str, realm: &str, sidecar: &str) -> Value {
+    let mut stream = json!({"kind": kind, "realm_id": realm});
+    if kind == "sidecar" {
+        stream["sidecar_id"] = json!(sidecar);
+    }
+    stream
 }

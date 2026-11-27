@@ -93,7 +93,7 @@ pub fn missing_sync_production_cases(
 /// total number of unwired suites happened to stay constant.
 // Content-key KATs run in arkret-mls; complete authorized-checkpoint
 // remains owned by 0805. Terminal live scenarios execute below.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 32] = [
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 30] = [
     "ak.suite.agent.draft_pending_intent.v1",
     "ak.suite.agent.participation.v1",
     "ak.suite.applet.managed_actor_authority.v1",
@@ -104,7 +104,6 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 32] = [
     "ak.suite.authz.approval_signature.v1",
     "ak.suite.blob.content_key.v1",
     "ak.suite.call.force_mute_v1_boundary.v1",
-    "ak.suite.circle.parent_membership.v1",
     "ak.suite.conformance.final_closure.v1",
     "ak.suite.current.cas_failure_read_boundary.v1",
     "ak.suite.direct_conversation.admission_producers.v1",
@@ -122,7 +121,6 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 32] = [
     "ak.suite.protocol.edge_cases.v1",
     "ak.suite.reaction.authority_order.v1",
     "ak.suite.realm_actor.contract.v1",
-    "ak.suite.scope.circle.v1",
     "ak.suite.signer_key.historical_commit_coordinate.v1",
     "ak.suite.state.registered_atomic_units_and_watch_audit.v1",
     "ak.suite.visibility.policy.v1",
@@ -156,7 +154,7 @@ const REVIEWED_APPLET_DEVICE_SCOPE_CASES: [&str; 15] = [
     "b_write",
     "no_cross_pair",
     "all_actions_required",
-    "realm_does_not_include_circle",
+    "grant_does_not_cover_third_realm",
     "empty",
     "ordinary_strings",
     "duplicate_scope",

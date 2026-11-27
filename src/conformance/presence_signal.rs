@@ -64,7 +64,7 @@ fn accepted_presence(
         product_authority: None,
         call_invitation: None,
         authority_commit_id: arkret_wire::RealmCommitId::from_digest([41; 32]),
-        parent_realm_authority_commit_id: None,
+
         domain: Box::new(SignalSequenceDomain {
             sender_actor_id: actor(),
             endpoint: SignalSequenceEndpoint::AccountDevice {
