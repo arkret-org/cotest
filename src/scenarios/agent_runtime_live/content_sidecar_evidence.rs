@@ -1372,7 +1372,7 @@ async fn verify_queued_history_loss(
     };
     let withdraw = async {
         let mut gate = await_history_dispatch(listener).await?;
-        let event = home
+        let event = governor
             .controller
             .author_event(
                 realm.as_str(),
@@ -1381,9 +1381,9 @@ async fn verify_queued_history_loss(
             )
             .await?;
         let accepted = submit_and_expect_commit(
-            &home.controller,
-            &home.account,
-            &home.controller.device_id,
+            &governor.controller,
+            &governor.account,
+            &governor.controller.device_id,
             &event,
         )
         .await?;

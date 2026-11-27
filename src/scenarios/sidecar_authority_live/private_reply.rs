@@ -304,7 +304,10 @@ pub(crate) async fn join_agent_and_consume(
             caller_actor_id: actor,
             cursor: None,
         };
-        let page = http.self_mls_roster_authority(&request).await?;
+        let page = http
+            .self_mls_roster_authority(&request)
+            .await
+            .context("read the Sidecar roster at the accepted Add")?;
         ensure!(page.roster.records.len() == 2 && page.roster.next_cursor.is_none());
         let peer = arkret::verify_mls_member_roster_authority_pages(
             std::slice::from_ref(&page),
@@ -315,7 +318,8 @@ pub(crate) async fn join_agent_and_consume(
                 &peer,
                 &page.roster.manifest,
             ))
-            .await?;
+            .await
+            .context("read the Sidecar genesis material for the accepted roster")?;
         arkret::install_verified_mls_self_roster_bindings(
             participant_group,
             &[page],
@@ -390,7 +394,12 @@ pub(crate) async fn join_agent_and_consume(
         recipient_durable_receipt: consume.recipient_durable_receipt.clone(),
     };
     ensure!(signed_digest != arkret_canonical::canonical_sha256(&unsigned)?);
-    let consumed = agent.runtime.sdk().keypackages_consume(&consume).await?;
+    let consumed = agent
+        .runtime
+        .sdk()
+        .keypackages_consume(&consume)
+        .await
+        .context("consume the private Welcome after durable MLS restore")?;
     ensure!(
         consumed.consume_receipt.request_digest.as_str() == signed_digest,
         "Sidecar consume receipt did not bind the complete signed command"
