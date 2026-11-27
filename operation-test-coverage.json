@@ -7,7 +7,7 @@
     "test_layers": {
       "coland_unit": {
         "source_file_count": 553,
-        "source_sha256": "c2bc356c86d154dfc8498115bca5b61015e54b79c28b1774b9161feff0ae8dac",
+        "source_sha256": "32e3bd43b24d1e16a8f60783a77d84e93e1e348922a1fabc2519654fbfffb2f5",
         "evidence_count": 905,
         "covered_operation_count": 164
       },
@@ -19,7 +19,7 @@
       },
       "cotest_rust": {
         "source_file_count": 664,
-        "source_sha256": "f2f0326c42022431fc3ae98b82fd560160d5f2f515c877052d088ff4633c991d",
+        "source_sha256": "e455da1e9e8ab8111edae12da768ec421d6d89432cdd43f13e1d88a6206466b4",
         "evidence_count": 467,
         "covered_operation_count": 151
       },

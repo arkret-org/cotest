@@ -435,48 +435,17 @@ pub(super) async fn run(ctx: &mut MlsApiContext<'_>) -> Result<()> {
             &event,
         )
         .await?;
-        let snapshot = ctx
-            .holder
-            .client
-            .sdk()
-            .realm_state_snapshot_head(ctx.realm)
-            .await?;
-        use sha2::Digest as _;
-        let request = arkret_wire::RealmAuthorityBundleRequestBody {
-            realm_id: ctx.realm.clone(),
-            nonce: arkret_wire::Base64UrlString::new(arkret_canonical::base64url_encode(
-                sha2::Sha256::digest(arkret_identifiers::new_prefixed_uuid7("ak:request:")),
-            ))
-            .map_err(anyhow::Error::msg)?,
+        let rows = verified_policy_rows(ctx.source, ctx.holder, ctx.realm).await?;
+        let [arkret_wire::CurrentState::Value { source_stream_ref, revision, value, .. }] =
+            rows.as_slice()
+        else {
+            anyhow::bail!("expected one receipt policy for the Realm");
         };
-        let http = ctx.holder.client.sdk();
-        let bundle = http.realm_authority_bundle(&request).await?;
-        let service_id: arkret_identifiers::DidCoreId = ctx.source.client.service_id().parse()?;
-        let resolution = http.open_service_resolution(&service_id).await?;
         ensure!(
-            cotest_test_support::wire::verify_realm_state_snapshot(json!({
-                "snapshot":snapshot,"expected_snapshot_id":snapshot.snapshot_id,
-                "authority_request":request,"authority_bundle":bundle,
-                "trusted_service_id":service_id,"service_resolution":resolution
-            }))? == json!({"verified":true}),
-            "receipt policy snapshot failed the shared cryptographic history/authority verifier"
-        );
-        let snapshot = serde_json::to_value(snapshot)?;
-        let rows = snapshot["current_state_entries"]
-            .as_array()
-            .context("snapshot current rows")?
-            .iter()
-            .filter(|r| {
-                r["selector"]["kind"] == "scope_read_receipt_policy"
-                    && r["selector"]["scope_ref"] == json!({"kind":"realm","realm_id":ctx.realm})
-            })
-            .collect::<Vec<_>>();
-        ensure!(
-            rows.len() == 1
-                && rows[0]["value"] == serde_json::to_value(payload)?
-                && rows[0]["source_stream_ref"] == serde_json::to_value(&commit.stream_ref)?
-                && rows[0]["revision"]
-                    == json!({"commit_id":commit.commit_id,"stream_position":commit.stream_position}),
+            source_stream_ref == &commit.stream_ref
+                && revision.commit_id == commit.commit_id
+                && revision.stream_position == commit.stream_position
+                && value == &serde_json::to_value(payload)?,
             "receipt policy snapshot lost its exact accepted current revision"
         );
         // An encrypted relay cannot select a plaintext target or reader.

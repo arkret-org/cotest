@@ -226,24 +226,28 @@ fn scope_receipt_decision(input: &Value) -> Result<Value> {
     {
         return Ok(denied());
     }
-    let selector = json!({"kind":"scope_read_receipt_policy","scope_ref":scope});
     let rows = input["policies"]
         .as_array()
         .ok_or_else(|| anyhow!("missing policies"))?
         .iter()
-        .filter(|row| row["selector"] == selector)
+        .filter(|row| row["owner_realm_id"] == input["scope_ref"]["realm_id"])
         .collect::<Vec<_>>();
     let policy = match (input["current_status"].as_str(), rows.as_slice()) {
         (Some("never_written"), []) => {
             arkret_models_collaboration::objects::read_receipts::ReadReceiptPolicy::default()
         }
         (Some("present"), [row]) => {
-            let Ok(current) = serde_json::from_value::<
-                arkret_models_collaboration::events_payloads::CurrentScopeReadReceiptPolicy,
-            >((*row).clone()) else {
+            let Some(mut original) = row.as_object().cloned() else {
                 return Ok(denied());
             };
-            if current.validate().is_err() {
+            // The vector annotates each snapshot row with its containing Realm.
+            original.remove("owner_realm_id");
+            let Ok(current) = serde_json::from_value::<
+                arkret_models_collaboration::events_payloads::CurrentScopeReadReceiptPolicy,
+            >(Value::Object(original)) else {
+                return Ok(denied());
+            };
+            if current.validate().is_err() || current.source_stream_ref.scope_ref() != scope {
                 return Ok(denied());
             }
             current.value.resolved()
