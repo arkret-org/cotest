@@ -131,6 +131,7 @@ pub use content_session_evidence::{
 pub use content_sidecar_evidence::{
     REVIEWED_SIDECAR_CONTENT_CASES, run_agent_content_sidecar_production,
     run_agent_content_sidecar_read_production, run_agent_membership_discovery,
+    run_cross_station_project_history, run_home_sidecar_offline,
 };
 pub use cross_station_agent_join::{
     run_cross_station_agent_join, run_cross_station_expired_session,

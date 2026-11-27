@@ -10,7 +10,7 @@ use crate::scenarios::human_device_producer_live::{
     wait_for_committed,
 };
 
-async fn controller_join(
+pub(super) async fn controller_join(
     home: &ActualAgentDeployment,
     governor: &ActualAgentDeployment,
     realm: &RealmId,
@@ -171,7 +171,9 @@ pub async fn run_cross_station_expired_session() -> Result<()> {
     run_cross_station(CrossStationCase::ExpiredRuntime).await
 }
 
-async fn run_cross_station(case: CrossStationCase) -> Result<()> {
+pub(super) async fn independent_stations(
+    observer: Option<std::net::SocketAddr>,
+) -> Result<(ActualAgentDeployment, ActualAgentDeployment)> {
     let mut home = coauth_session_evidence::actual_agent_deployment("sidecar-owning-h")
         .await
         .context("H: normal Coauth tenant/controller onboarding")?;
@@ -189,6 +191,9 @@ async fn run_cross_station(case: CrossStationCase) -> Result<()> {
         "H and G must use independent durable databases"
     );
     ensure!(home.coauth.pg.connect_url != governor.coauth.pg.connect_url);
+    if let Some(observer) = observer {
+        home.station.observe_agent_history_handoff(observer)?;
+    }
     home.station
         .restart_with_federation_mesh(&[governor.station.base_url().to_string()])
         .await?;
@@ -196,6 +201,11 @@ async fn run_cross_station(case: CrossStationCase) -> Result<()> {
         .station
         .restart_with_federation_mesh(&[home.station.base_url().to_string()])
         .await?;
+    Ok((home, governor))
+}
+
+async fn run_cross_station(case: CrossStationCase) -> Result<()> {
+    let (mut home, governor) = independent_stations(None).await?;
     // The two controllers already own normally issued grants. Only future
     // grants issued at H use this shorter lifetime; their clocks remain real.
     {

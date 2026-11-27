@@ -275,14 +275,24 @@ pub async fn wait_for_welcome(
     member: &Member,
     expected: &MlsWelcomeDelivery,
 ) -> Result<(Vec<MlsWelcomeDelivery>, String)> {
+    wait_for_recipient_welcome(&member.client, expected).await
+}
+
+pub(crate) async fn wait_for_recipient_welcome(
+    recipient: &crate::harness::TestActorClient,
+    expected: &MlsWelcomeDelivery,
+) -> Result<(Vec<MlsWelcomeDelivery>, String)> {
     let deadline = Instant::now() + Duration::from_secs(120);
     loop {
-        let (queued, token) = recipient_welcomes(&member.client).await?;
+        let (queued, token) = recipient_welcomes(recipient).await?;
         if queued.contains(expected) {
             return Ok((queued, token));
         }
         if Instant::now() >= deadline {
-            bail!("the replicated Welcome never reached the recipient queue: {queued:?}");
+            bail!(
+                "the expected Welcome did not arrive within 120 seconds ({} other deliveries)",
+                queued.len()
+            );
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
     }

@@ -281,7 +281,7 @@ pub async fn seal_agent_message(
     Ok((original, sealed))
 }
 
-fn seal_message(
+pub(crate) fn seal_message(
     group: &mut ArkretMlsGroup,
     original: &mut Event,
     reference: &EventId,

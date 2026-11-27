@@ -25,6 +25,39 @@ pub async fn root_context(
         anyhow::bail!("content group original withheld");
     };
     group.verify_installed_historical_base(current, reference)?;
+    if matches!(group.scope(), arkret::ScopeRef::Sidecar { .. }) {
+        let request = arkret::MlsMemberRosterAuthorityReadRequestBody {
+            realm_id: group.scope().realm_id().clone(),
+            effective_scope: group.scope().clone(),
+            mls_group_id: group.scope().canonical_mls_group_id()?,
+            target_commit_event_ref: reference.clone(),
+            target_epoch: group.epoch(),
+            caller_actor_id: group.local_content_endpoint()?.actor_id,
+            cursor: None,
+        };
+        let mut page_request = request.clone();
+        let mut pages = Vec::new();
+        loop {
+            let page = http.self_mls_roster_authority(&page_request).await?;
+            let next = page.roster.next_cursor.clone();
+            pages.push(page);
+            if next.is_none() {
+                break;
+            }
+            ensure!(
+                pages.len() < pages[0].roster.manifest.page_count as usize,
+                "roster pagination exceeded its signed count"
+            );
+            page_request.cursor = next;
+        }
+        let context = arkret::verified_sidecar_root_context(
+            &pages,
+            &request,
+            group.group_ciphersuite_canonical_id()?,
+        )?;
+        source.check_session()?;
+        return Ok(context);
+    }
     let mut original = current.event.clone();
     let mut seen = std::collections::BTreeSet::new();
     let genesis = loop {

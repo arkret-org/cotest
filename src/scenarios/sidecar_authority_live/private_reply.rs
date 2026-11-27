@@ -8,7 +8,8 @@ use serde_json::json;
 
 use super::*;
 use crate::scenarios::agent_runtime_live::AgentRuntimeSession;
-use crate::scenarios::mls_lifecycle_live::{accepted_full_view, post_json, recipient_welcomes};
+use crate::scenarios::cross_station_mls_welcome::wait_for_recipient_welcome;
+use crate::scenarios::mls_lifecycle_live::{accepted_full_view, post_json};
 
 #[async_trait::async_trait(?Send)]
 pub(crate) trait JoinObserver {
@@ -48,6 +49,18 @@ pub(crate) async fn join_agent_with_observer(
     group: &mut arkret::ArkretMlsGroup,
     genesis: &arkret_wire::Event,
     observer: Option<&dyn JoinObserver>,
+) -> Result<(arkret_wire::CommittedEventFullView, arkret::ArkretMlsGroup)> {
+    join_agent_and_consume(controller, agent, group, genesis, observer, true).await
+}
+
+/// The cross-Station scenario supplies its own governing history and queue probes.
+pub(crate) async fn join_agent_and_consume(
+    controller: &Member,
+    agent: &AgentRuntimeSession,
+    group: &mut arkret::ArkretMlsGroup,
+    genesis: &arkret_wire::Event,
+    observer: Option<&dyn JoinObserver>,
+    check_local_snapshot: bool,
 ) -> Result<(arkret_wire::CommittedEventFullView, arkret::ArkretMlsGroup)> {
     let scope = &genesis.scope_ref;
     let realm = scope.realm_id();
@@ -122,26 +135,21 @@ pub(crate) async fn join_agent_with_observer(
     arkret::verify_peer_keypackage_claim_receipt_signature(&claimed.claim_receipt, &resolution)?;
     let selected = &claimed.claims[0];
     ensure!(selected.agent_key_authorize_event_id.as_ref() == Some(&agent.key_authorization));
-    let snapshot = controller
-        .client
-        .sdk()
-        .realm_state_snapshot_head(realm)
-        .await?;
-    let base: arkret_wire::MlsGroupValue = snapshot
-        .current_state_entries
-        .iter()
-        .find_map(|row| {
-            let arkret_wire::CurrentState::Value {
-                selector: arkret_wire::CurrentSelector::MlsGroup { scope_ref },
-                value,
-                ..
-            } = row
-            else {
-                return None;
-            };
-            (scope_ref == scope).then(|| serde_json::from_value(value.clone()))
-        })
-        .context("Sidecar MLS current unavailable")??;
+    let genesis_payload: arkret_models_collaboration::events_payloads::MlsGenesisPayload =
+        serde_json::from_value(serde_json::to_value(&genesis.payload)?)?;
+    ensure!(genesis_payload.governance_binding.effective_scope() == scope);
+    let revision = genesis_payload.governance_binding.key_access_revision();
+    genesis_payload.validate()?;
+    let base = arkret_wire::MlsGroupValue {
+        effective_scope: scope.clone(),
+        genesis_event_ref: genesis.event_id.clone(),
+        cipher_suite: genesis_payload.cipher_suite,
+        current_mls_commit_event_ref: genesis.event_id.clone(),
+        epoch: 0,
+        current_key_access_revision: revision,
+        covered_key_access_revision: revision,
+        public_tree_ref: genesis_payload.ratchet_tree_ref,
+    };
     let binding = if let Some(sidecar_id) = sidecar_id {
         let view = controller
             .client
@@ -154,7 +162,7 @@ pub(crate) async fn join_agent_with_observer(
             Some(genesis.event_id.clone()),
             0,
             1,
-            base.current_key_access_revision,
+            revision,
             view.mls_context.participant_authority_digest,
         )?
     } else {
@@ -163,7 +171,7 @@ pub(crate) async fn join_agent_with_observer(
             Some(genesis.event_id.clone()),
             0,
             1,
-            base.current_key_access_revision,
+            revision,
         )?
     };
     let add = group.add_member_with_governance_binding(
@@ -247,7 +255,7 @@ pub(crate) async fn join_agent_with_observer(
     );
     let accepted = accepted_full_view(&controller.client, &event.event_id).await?;
     ensure!(group.install_accepted_commit(&accepted, &base)? == 1);
-    let (queued, _ack) = recipient_welcomes(&agent.runtime)
+    let (queued, _ack) = wait_for_recipient_welcome(&agent.runtime, &welcome)
         .await
         .context("private runtime Welcome queue")?;
     ensure!(queued == vec![welcome.clone()]);
@@ -393,7 +401,7 @@ pub(crate) async fn join_agent_with_observer(
             == arkret_canonical::canonical_json_bytes(&consumed)?,
         "Sidecar consume replay replaced its original receipt"
     );
-    if let Some(sidecar_id) = sidecar_id {
+    if let Some(sidecar_id) = sidecar_id.filter(|_| check_local_snapshot) {
         let view = controller
             .client
             .sdk()
@@ -404,25 +412,10 @@ pub(crate) async fn join_agent_with_observer(
             "Sidecar did not activate after full-command consume and exact replay: {view:?}"
         );
         let http = agent.runtime.sdk();
-        let snapshot = http.realm_state_snapshot_head(realm).await?;
         let stream = arkret_wire::CommitStreamRef::from_scope(scope, Some(realm.clone()))?;
         ensure!(
-            snapshot
-                .current_state_entries
-                .iter()
-                .any(|row| matches!(row,
-            arkret_wire::CurrentState::Value {
-                selector: arkret_wire::CurrentSelector::SidecarContext { .. }, source_stream_ref, ..
-            } if source_stream_ref == &stream)),
-            "consumed Agent cannot read its private current"
-        );
-        let original = http
-            .realm_state_snapshot_by_ref(realm, &snapshot.snapshot_id)
-            .await?;
-        ensure!(
-            arkret_canonical::canonical_json_bytes(&original)?
-                == arkret_canonical::canonical_json_bytes(&snapshot)?,
-            "effective Agent by-ref rewrote the original"
+            http.realm_state_snapshot_head(realm).await.is_err(),
+            "private enrollment exposed the controller PCR snapshot to the Agent"
         );
         let mut forward = Vec::new();
         for direction in [

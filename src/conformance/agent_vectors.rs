@@ -1570,7 +1570,8 @@ fn session_content_decision(case: &Value, read_actions: &[Value]) -> &'static st
                             && if read {
                                 path["kind"] == "sidecar_read"
                             } else {
-                                path["kind"] == "capability_grant"
+                                path["kind"] == "sidecar_private_reply"
+                                    && case["action"] == "ak.message.create"
                             }
                     }
                     Some("realm" | "circle") => {

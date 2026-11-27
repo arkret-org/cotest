@@ -1035,6 +1035,29 @@ fn committed_event_read_failure_diagnostic(error: &arkret_http_client::Error) ->
     })
 }
 
+pub(crate) async fn wait_for_member_snapshot(
+    client: &TestActorClient,
+    realm: &arkret_wire::RealmId,
+) -> Result<arkret_wire::RealmStateSnapshot> {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(120);
+    loop {
+        match client.sdk().realm_state_snapshot_head(realm).await {
+            Ok(snapshot) => return Ok(snapshot),
+            Err(arkret_http_client::Error::Api { status: 503, error })
+                if error.error_code()
+                    == Some(arkret_wire::ErrorCode::RealmStateSnapshotUnavailable)
+                    && tokio::time::Instant::now() < deadline =>
+            {
+                // A member read schedules native convergence when its durable
+                // cut trails the governor. Retry only this registered current
+                // read; an exact historical refusal is never replaced/retried.
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+}
+
 pub async fn wait_for_committed(
     client: &TestActorClient,
     event_id: &EventId,

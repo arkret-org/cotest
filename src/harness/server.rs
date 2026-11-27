@@ -1550,6 +1550,20 @@ impl ArkretServer {
         self.restart_external_process().await
     }
 
+    /// Attach a timing observer to this local conformance process's history handoff.
+    pub(crate) fn observe_agent_history_handoff(
+        &mut self,
+        observer: std::net::SocketAddr,
+    ) -> Result<()> {
+        anyhow::ensure!(observer.ip().is_loopback());
+        self.external_restart
+            .as_mut()
+            .context("owned external Station")?
+            .extra_env
+            .push(("COTEST_AGENT_HISTORY_HANDOFF".into(), observer.to_string()));
+        Ok(())
+    }
+
     /// Change only normal deployment peer discovery, retaining custody and data.
     pub async fn restart_with_federation_peers(&mut self, endpoints: &[String]) -> Result<()> {
         let config = self

@@ -11,25 +11,7 @@ use crate::scenarios::circle_poll_scope_live::{circle_create, circle_event, join
 mod privacy;
 mod withheld;
 
-async fn snapshot(client: &TestActorClient, realm: &RealmId) -> Result<RealmStateSnapshot> {
-    let deadline = tokio::time::Instant::now() + HELD_WINDOW;
-    loop {
-        match client.sdk().realm_state_snapshot_head(realm).await {
-            Ok(snapshot) => return Ok(snapshot),
-            Err(arkret_http_client::Error::Api { status: 503, error })
-                if error.error_code()
-                    == Some(arkret_wire::ErrorCode::RealmStateSnapshotUnavailable)
-                    && tokio::time::Instant::now() < deadline =>
-            {
-                // A member read schedules native convergence when its durable
-                // cut trails the governor. Retry only this registered current
-                // read; an exact historical refusal is never replaced/retried.
-                tokio::time::sleep(Duration::from_millis(100)).await;
-            }
-            Err(error) => return Err(error.into()),
-        }
-    }
-}
+use crate::scenarios::human_device_producer_live::wait_for_member_snapshot as snapshot;
 
 fn assert_hidden_private_stream(
     snapshot: &RealmStateSnapshot,
@@ -110,7 +92,12 @@ async fn private_sidecar(
         bail!("private Sidecar atomic unit was not accepted");
     };
     Ok(CommitStreamRef::Sidecar {
-        realm_id: realm.clone(),
+        realm_id: client
+            .principal
+            .as_ref()
+            .context("controller Human PCR")?
+            .pcr_realm_id
+            .clone(),
         sidecar_id: accepted.sidecar_id,
     })
 }
