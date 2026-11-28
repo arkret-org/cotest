@@ -22,4 +22,4 @@ python -m unittest scripts.tests.test_operation_test_coverage.AcceptanceTraceabi
 
 2026-10-12新增两个 `to_device_offline_ordering` 真实HTTP场景，对应 device-lifecycle §7／1638 DR-C6：过期 exact replay、跨HTTP key及ACK后重放保留原结果；过期未ACK原envelope保留；过期或超过24h目标让混合batch整体param_invalid且零新入队。它们补队列合同覆盖，不能证明四种RecoveryMethod或恢复后编辑全部通过。
 
-逐项处理及运行证据见[库存复核报告](../../arkret-work/reports/2026-10-12-impl-active-acceptance-audit.md)。未接线的大范围产品场景继续由相应 owner 实施，清单检查本身不关闭任务、不提高 profile／SDK claim。
+逐项处理及运行证据见[库存复核报告](https://github.com/arkret-org/arkret-work/blob/a924ae5d6227846351c554f7969181f37177c970/reports/2026-10-12-impl-active-acceptance-audit.md)。未接线的大范围产品场景继续由相应 owner 实施，清单检查本身不关闭任务、不提高 profile／SDK claim。

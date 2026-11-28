@@ -32,4 +32,4 @@
 SDK 向量、native storage/codec 单测、TypeScript 检查分别证明各自边界，不能代替上述实际生产成功链。浏览器附件输入使用 File/Blob slice；Dioxus 的 `byte_stream()` 在当前版本整读 File，因此不用于浏览器生产路径。原生使用文件分段读取和受保护按需 KV。接收端先验证完整承诺，再输出 browser Blob URL 或原生可撤销临时文件能力。
 
 运行状态、失败、自然退出和最终 pins 写入 0805 的本批报告；历史 P2-044 的测试及旧 helper 名称不作为现实现交付证据。
-2026-10-14 最新冻结实际通过：真实provisioning 7/7，业务3项＋build-ID 4/4，自然exit0，0失败/跳过，secret scan通过。源码/lock/features/产物身份与原失败记录见 `arkret-work/reports/2026-10-14-0805-attachment-production-closeout.md`；三scope本地授权cut前提测试不冒充独立部署验收，whole-file/AES未启用。
+2026-10-14 最新冻结实际通过：真实provisioning 7/7，业务3项＋build-ID 4/4，自然exit0，0失败/跳过，secret scan通过。源码/lock/features/产物身份与原失败记录见 [2026-10-14-0805-attachment-production-closeout.md](https://github.com/arkret-org/arkret-work/blob/a924ae5d6227846351c554f7969181f37177c970/reports/2026-10-14-0805-attachment-production-closeout.md)；三scope本地授权cut前提测试不冒充独立部署验收，whole-file/AES未启用。

@@ -53,7 +53,7 @@
         "inkson/src/event_submit/message_authoring.rs",
         "cotest/src/conformance/applet_install.rs",
         "cotest/scripts/run-joint-e2e.ps1",
-        "arkret-work/reports/2026-10-21-cross-project-protocol-audit-joint-full.md",
+        "arkret-work/reports/acceptance/2026-11-27-circle-removal-and-protocol-simplification.md",
         "cotest/api-only-migration.json",
         "cotest/scripts/run-api-only-native-migrations.py",
         "cotest/e2e/helpers/coland-api.ts",
@@ -481,12 +481,12 @@
     {
       "task": "2026-10-22-2129-local-ci-repair.md",
       "criteria_count": 3,
-      "criteria_sha256": "01dd4710b84b196a543a69c58a80ccac3f2c7a74e859ee8e3675a5ecb2673659",
+      "criteria_sha256": "549d9a9687ba435feba3e82a11eb1370b2a2d1d3c6b20d6fdd535d766f35f0a0",
       "spec_refs": [],
       "source_refs": [
         "coland/Cargo.toml",
         "coland/deny.toml",
-        "arkret-work/reports/2026-10-23-ci-main-delivery.md",
+        "arkret-work/reports/acceptance/2026-11-27-circle-removal-and-protocol-simplification.md",
         "inkson/tests/contract/actor-profile-unavailable.spec.ts",
         "inkson/tests/contract/backup-unlock-unavailable.spec.ts",
         "inkson/justfile"
@@ -497,7 +497,7 @@
       ],
       "remaining_scenarios": [
         "在当前源复验备份解锁与资料页的具名失败并归因；修正有问题的产品或夹具。用正式 just test-wasm 入口验证两个目标、渲染特性、runner 与浏览器结果。",
-        "逐仓以当前 main 的首个有效失败诊断 CI、Coland 的 Docker／HTTP 及 Cotest 原生、文档与集成分片。保留现行工作流的分片、真实 10000 历史、MLS、SLO 与来源要求；逐项对照旧 235／31／8 分片记录。0328 的历史 CI 对账在此复用。第十四轮单站 60 个业务失败中，45 个停在已修看板定位器；针对其余失败逐个对照首个错误（勿扰、联系人侧栏、加密附件、跨站会话、Agent 授权等），复现后修正或交回对应生产任务。[运行记录](../../reports/2026-11-27-circle-removal-and-protocol-simplification.md)",
+        "逐仓以当前 main 的首个有效失败诊断 CI、Coland 的 Docker／HTTP 及 Cotest 原生、文档与集成分片。保留现行工作流的分片、真实 10000 历史、MLS、SLO 与来源要求；逐项对照旧 235／31／8 分片记录。0328 的历史 CI 对账在此复用。第十四轮单站 60 个业务失败中，45 个停在已修看板定位器；针对其余失败逐个对照首个错误（勿扰、联系人侧栏、加密附件、跨站会话、Agent 授权等），复现后修正或交回对应生产任务。[运行记录](../../reports/acceptance/2026-11-27-circle-removal-and-protocol-simplification.md)",
         "账单／支出限制修复后复验受影响的协调仓工作流。Coauth 的真实 OIDC/FAPI 证据继续区分 PAR、授权响应 iss、OAuth DPoP 和五项人工 REVIEW。已明确延期的 mTLS、31 项原生证明及保留的 admin／RFD 红项按原裁决记录。"
       ]
     },
