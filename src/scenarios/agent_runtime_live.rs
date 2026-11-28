@@ -129,8 +129,9 @@ pub use content_session_evidence::{
     run_agent_session_content_read_boundary,
 };
 pub use content_sidecar_evidence::{
-    REVIEWED_SIDECAR_CONTENT_CASES, run_agent_content_sidecar_production,
-    run_agent_content_sidecar_read_production, run_agent_membership_discovery,
+    REVIEWED_SIDECAR_CONTENT_CASES, agent_first_crypto_worker,
+    run_agent_content_sidecar_production, run_agent_content_sidecar_read_production,
+    run_agent_first_sidecar_publication, run_agent_membership_discovery,
     run_cross_station_project_history, run_home_sidecar_offline,
 };
 pub use cross_station_agent_join::{

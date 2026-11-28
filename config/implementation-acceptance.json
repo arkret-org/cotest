@@ -947,8 +947,8 @@
     },
     {
       "task": "2026-11-14-2133-protocol-rationality-production-sync.md",
-      "criteria_count": 7,
-      "criteria_sha256": "0adf1500d58fbf2c91cc11d2066b32f70f131c48be515bb330cfba6e395726d4",
+      "criteria_count": 6,
+      "criteria_sha256": "c73736903f0610104b436db8bb34f16c36336f44d79972d74614b662e32b2a8e",
       "spec_refs": [],
       "source_refs": [
         "arkret-work/tasks/impl-active/2026-11-14-2133-protocol-rationality-production-sync.md",
@@ -1012,6 +1012,12 @@
         },
         {
           "path": "cotest/tests/agent_content_sidecar_live.rs",
+          "symbol": "effective_agent_first_sidecar_message_survives_restart_loss_and_revocation",
+          "kind": "live",
+          "covers": "First Agent-authored message of a vacant Sidecar epoch, lost backup and message acknowledgements, exact concurrent retries, cold Station and crypto worker recovery, refusal after withdrawal and independent owner-device decryption."
+        },
+        {
+          "path": "cotest/tests/agent_content_sidecar_live.rs",
           "symbol": "offline_project_home_sidecar_creation_and_recovery",
           "kind": "live",
           "covers": "Controller-first private question, Agent reply and new-device recovery while the project Station is offline."
@@ -1024,11 +1030,10 @@
         }
       ],
       "engineering_checks": [
-        "Exercise the Agent as the first writer of a new Sidecar epoch, including first root publication, restart and exact retries. Verify self and peer recovery cleanup with the real prepared inventory from 1156."
+        "Verify Agent PCR §8.2 root publication using the bound Agent session. Verify self and peer recovery cleanup with the real prepared inventory from 1156."
       ],
       "remaining_scenarios": [
-        "1017 首发。使用真实签发的 Agent 会话，在主人尚未发过本轮消息、没有可复用备份时，于归属站准备并以 Agent 身份 PUT 单一 Sidecar 根。确认耐久接纳后才提交原签业务消息，合法新设备可恢复正文。已有本轮合格原件时验证引用复用。",
-        "1017 故障与拒绝。覆盖服务与运行时冷重启、并发首发和确认丢失后的精确重试，证明同一意图只产生原结果。待生效、撤权、错误 epoch、混合根包和错误接收方均拒绝。另沿既有 Agent PCR §8.2 验其原生根备份与真实会话绑定。",
+        "1017 的 Agent PCR §8.2。用真实签发的 Agent 会话验证它自己的个人控制域根备份，并核对签名与运行身份绑定。",
         "0759 收尾。以 1156 的真实准备结果分别走 self 与 peer，验证独立 H/G 身份、正确来源成功、错误来源拒绝、超时后重试不重复使旧端失效；服务对外广告与可执行入口一致。",
         "G03／2032 用真实产品录制入口验证媒体字节进入已登记 STREAM 编码、获准方可读以及停止／撤权后的写入限制。G04 在主时间线验证已证身份提及和缺来源的降级展示，绑定账号保持准确。",
         "按下方八组具名验收条件对照实际消费者、已有运行和缺失证据。覆盖并发、拒绝、崩溃恢复与权限变化；2045-M09 已有本次规模实测。逐组结算当前组合的剩项。",

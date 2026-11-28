@@ -7,6 +7,9 @@ use crate::harness::CanonicalJsonBody;
 use crate::scenarios::mls_lifecycle_live::{ACTIVE_SUITE, Member, upload_public_blob};
 use crate::scenarios::sidecar_authority_live::private_reply::{self, JoinObserver};
 
+mod first_publication;
+pub use first_publication::agent_first_crypto_worker;
+
 pub const REVIEWED_SIDECAR_CONTENT_CASES: [&str; 18] = [
     "sidecar_read_without_literal_grant",
     "sidecar_read_does_not_grant_write",
@@ -1492,10 +1495,13 @@ async fn recover_on_new_device(
     expected: &arkret_wire::CommittedEventView,
     recovery_mnemonic: &str,
     producer: arkret_models_crypto::ContentEndpoint,
-    expected_reply: &arkret_wire::CommittedEventView,
-    reply_producer: arkret_models_crypto::ContentEndpoint,
+    reply: Option<(
+        &arkret_wire::CommittedEventView,
+        arkret_models_crypto::ContentEndpoint,
+    )>,
+    custody: Option<(&ActorId, &EventId)>,
     backup_verifier: &ed25519_dalek::VerifyingKey,
-) -> Result<(Vec<u8>, Vec<u8>)> {
+) -> Result<Vec<Vec<u8>>> {
     use arkret_models_crypto::*;
     use ed25519_dalek::Signer as _;
     let sdk = device.sdk();
@@ -1513,7 +1519,7 @@ async fn recover_on_new_device(
         ..
     } = &envelope.encryption_context;
     let [backup_id] = protection.backup_refs.as_slice() else {
-        bail!("expected the original controller backup")
+        bail!("expected a single original root backup")
     };
     let access = ContentHistoryBackupAccess {
         source: arkret_wire::CommittedEventRef {
@@ -1535,8 +1541,8 @@ async fn recover_on_new_device(
             backup_id,
             &KeysBackupsIssueUnlockChallengeRequestBody {
                 request_id: encoded(&nonce)?,
-                subject_actor_id: None,
-                custody_authorization_ref: None,
+                subject_actor_id: custody.map(|(actor, _)| actor.clone()),
+                custody_authorization_ref: custody.map(|(_, reference)| reference.clone()),
                 content_history: Some(access.clone()),
             },
         )
@@ -1564,8 +1570,8 @@ async fn recover_on_new_device(
         issued_at: challenge.issued_at,
         expires_at: challenge.expires_at,
         content_history: Some(access),
-        subject_actor_id: None,
-        custody_authorization_ref: None,
+        subject_actor_id: custody.map(|(actor, _)| actor.clone()),
+        custody_authorization_ref: custody.map(|(_, reference)| reference.clone()),
         signature_proof: KeyBackupUnlockSignatureProof {
             verification_method: DidUrl::new(format!("{}#{}", principal.did, principal.device_id))
                 .map_err(anyhow::Error::msg)?,
@@ -1583,10 +1589,28 @@ async fn recover_on_new_device(
     let backup = sdk
         .unlock_key_backup(backup_id, &KeysBackupsUnlockRequestBody { proof })
         .await?;
-    ensure!(
-        backup.signature_proof.device_authorize_event_id.as_ref()
-            == Some(&producer.authorization_event_ref)
-    );
+    ensure!(backup.custody_authorization_ref.as_ref() == custody.map(|(_, reference)| reference));
+    match &producer.endpoint {
+        arkret_wire::MlsWelcomeRecipientEndpoint::Device { .. } => {
+            ensure!(
+                backup.signature_proof.device_authorize_event_id.as_ref()
+                    == Some(&producer.authorization_event_ref)
+            );
+        }
+        arkret_wire::MlsWelcomeRecipientEndpoint::AgentRuntime {
+            verification_method,
+        } => {
+            ensure!(
+                backup.actor_id == producer.actor_id
+                    && backup.signature_proof.verification_method == *verification_method
+                    && backup
+                        .signature_proof
+                        .agent_authorization_event_ref
+                        .as_ref()
+                        == Some(&producer.authorization_event_ref)
+            );
+        }
+    }
     let recovery = arkret::identity_root::derive_identity_recovery_key_material_from_bip39(
         recovery_mnemonic,
         "",
@@ -1643,6 +1667,10 @@ async fn recover_on_new_device(
             &envelope.ciphertext,
         )?)
     };
+    let first = decrypt(event, &envelope, producer)?;
+    let Some((expected_reply, reply_producer)) = reply else {
+        return Ok(vec![first]);
+    };
     let restored_reply = sdk
         .committed_event_get(&expected_reply.commit().event_ref)
         .await?;
@@ -1654,17 +1682,110 @@ async fn recover_on_new_device(
         .reducer_input()
         .context("recovery requires the signed Agent reply")?;
     let reply_envelope = serde_json::from_value(reply.payload["encrypted_content"].clone())?;
-    Ok((
-        decrypt(event, &envelope, producer)?,
+    Ok(vec![
+        first,
         decrypt(reply, &reply_envelope, reply_producer)?,
-    ))
+    ])
 }
 
 pub async fn run_home_sidecar_offline() -> Result<()> {
     crate::harness::heap_future(|| run_sidecar_production(SidecarCase::OfflineHome)).await
 }
 
+pub async fn run_agent_first_sidecar_publication() -> Result<()> {
+    crate::harness::heap_future(|| run_sidecar_production(SidecarCase::AgentFirst)).await
+}
+
+async fn select_agent_backup_series(
+    controller: &Member,
+    agent: &AgentRuntimeSession,
+) -> Result<arkret::BackupSeriesId> {
+    use arkret_models_collaboration::events_payloads::{
+        ControllerBackupTrustAnchor, UnsignedKeyBackupActiveSeries,
+    };
+    let series = arkret::BackupSeriesId::new(arkret::new_prefixed_uuid7("ak:backup_series:"))
+        .map_err(anyhow::Error::msg)?;
+    let source = controller
+        .client
+        .sdk()
+        .committed_event_get(&agent.custody_authorization)
+        .await?;
+    ensure!(
+        source
+            .reducer_input()
+            .is_some_and(|event| event.kind == arkret::EventKind::AgentProvision
+                && event.actor_id == controller.actor)
+    );
+    let now = arkret_canonical::normalize_timestamp_canonical(Utc::now());
+    let actor = ActorId::account(agent.agent_account.clone());
+    let record = UnsignedKeyBackupActiveSeries::new(
+        actor.clone(),
+        arkret_models_crypto::BackupKind::SecretStorage,
+        series.clone(),
+        1,
+        vec![],
+        source.commit().commit_id.clone(),
+        now,
+        controller.method.clone(),
+        ControllerBackupTrustAnchor {
+            authorize_event_id: controller.authorize_event_id.clone(),
+            generation_ref: 1,
+        },
+    )?
+    .with_agent_custody(
+        controller.actor.clone(),
+        agent.custody_authorization.clone(),
+    )?;
+    let signature = controller
+        .key
+        .sign(&record.signing_payload_bytes()?)
+        .to_bytes();
+    let record = record.attach_signature(
+        arkret_wire::Base64UrlString::new(arkret_canonical::base64url_encode(signature))
+            .map_err(anyhow::Error::msg)?,
+    )?;
+    let mut raw = arkret_wire::test_support::raw_event_for_actor_at(
+        arkret::EventKind::KeyBackupActiveSeries.as_str(),
+        ScopeRef::Realm {
+            realm_id: agent.agent_pcr.clone(),
+        },
+        actor,
+        serde_json::to_value(record)?,
+        now,
+    )?;
+    raw.executed_by = Some(controller.actor.clone());
+    raw.authorization_ref = Some(
+        arkret_wire::AuthorizationRef::new(agent.delegation.as_str())
+            .map_err(anyhow::Error::msg)?,
+    );
+    let event = sign(
+        arkret_wire::AuthoredEvent::finalize_with_digest_suite(
+            raw,
+            arkret_canonical::DigestSuite::Sha256,
+        )?,
+        &controller.method,
+        controller.key.to_bytes(),
+    )?;
+    let outcome: AuthoritySubmitResponseBody = serde_json::from_value(
+        expect_json(
+            controller
+                .client
+                .post("/_arkret/self/events")
+                .canonical_json(&arkret_wire::EventAdmissionSubmission::new(event.clone()))?,
+            StatusCode::OK,
+        )
+        .await
+        .context("select Agent backup series")?,
+    )?;
+    let AuthoritySubmitResponseBody::Accepted { commit, .. } = outcome else {
+        bail!("Agent backup series was not committed: {outcome:?}")
+    };
+    ensure!(commit.event_ref == event.event_id);
+    Ok(series)
+}
+
 enum SidecarCase {
+    AgentFirst,
     Content,
     LocalRead,
     ProjectHistory,
@@ -1672,7 +1793,6 @@ enum SidecarCase {
 }
 
 async fn run_sidecar_production(case: SidecarCase) -> Result<()> {
-    let read_positive_only = matches!(case, SidecarCase::LocalRead);
     let fixture = crate::conformance::load_fixture_value("agent-vectors-fixture.json")?;
     let contract = &fixture["session_content_authority_contract"];
     ensure!(
@@ -1785,7 +1905,7 @@ async fn run_sidecar_production(case: SidecarCase) -> Result<()> {
         );
     }
     let mut observer = None;
-    let (deployment, mut governor) = match case {
+    let (deployment, governor) = match case {
         SidecarCase::ProjectHistory => {
             let listener =
                 tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).await?;
@@ -1804,6 +1924,17 @@ async fn run_sidecar_production(case: SidecarCase) -> Result<()> {
             None,
         ),
     };
+    crate::harness::heap_future(move || exercise_sidecar(case, deployment, governor, observer))
+        .await
+}
+
+async fn exercise_sidecar(
+    case: SidecarCase,
+    deployment: coauth_session_evidence::ActualAgentDeployment,
+    mut governor: Option<coauth_session_evidence::ActualAgentDeployment>,
+    observer: Option<tokio::net::TcpListener>,
+) -> Result<()> {
+    let read_positive_only = matches!(case, SidecarCase::LocalRead);
     let client = &deployment.controller;
     let principal = client.principal.as_ref().context("actual controller")?;
     let controller = Member {
@@ -1875,7 +2006,7 @@ async fn run_sidecar_production(case: SidecarCase) -> Result<()> {
         remote.station.stop_external_process().await?;
         remote.coauth.kill_immediately()?;
     }
-    let operations = arkret_schema::agent_runtime_scope::complete_agent_runtime_scope([
+    let mut requested = vec![
         ServiceOperationId::SELF_KEYS_KEYPACKAGES_UPLOAD_CREATE_V1,
         ServiceOperationId::SELF_COMMITTED_EVENT_READ_SCAN_V1,
         ServiceOperationId::SELF_COMMITTED_EVENT_RESOURCE_GET_V1,
@@ -1893,7 +2024,14 @@ async fn run_sidecar_production(case: SidecarCase) -> Result<()> {
         "ak.event.read",
         "ak.object.read",
         "ak.message.create",
-    ])?;
+    ];
+    if matches!(case, SidecarCase::AgentFirst) {
+        requested.extend([
+            ServiceOperationId::SELF_KEYS_BACKUPS_READ_LIST_V1,
+            ServiceOperationId::SELF_KEYS_BACKUPS_RESOURCE_REPLACE_V1,
+        ]);
+    }
+    let operations = arkret_schema::agent_runtime_scope::complete_agent_runtime_scope(requested)?;
     let actions = operations.iter().map(String::as_str).collect::<Vec<_>>();
     let mut provision_scope = requested_scope(&actions)?;
     if !matches!(case, SidecarCase::OfflineHome) {
@@ -2196,6 +2334,14 @@ async fn run_sidecar_production(case: SidecarCase) -> Result<()> {
         &genesis,
     )
     .await?;
+    if matches!(case, SidecarCase::AgentFirst) {
+        return crate::harness::heap_future(move || {
+            first_publication::join_and_publish(
+                deployment, controller, agent, group, genesis, enroll, strand, actions,
+            )
+        })
+        .await;
+    }
     if let Some(remote) = &mut governor {
         let (state, mut receiver) = Box::pin(private_reply::join_agent_and_consume(
             &controller,
@@ -2293,12 +2439,12 @@ async fn run_sidecar_production(case: SidecarCase) -> Result<()> {
                 &expected,
                 &recovery_mnemonic,
                 producer,
-                &original_reply,
-                reply_producer,
+                Some((&original_reply, reply_producer)),
+                None,
                 &verifier
             )
             .await?
-                == (plaintext, response_bytes),
+                == vec![plaintext, response_bytes],
             "new device could not recover the original private request and reply"
         );
         let restored = second.sdk().agent_sidecar_get(&sidecar).await?;
