@@ -5578,7 +5578,6 @@ export type SpaceObject = {
   "id"?: string;
   "schema": "ak.schema.space.v1";
   "realm_id": string;
-  "child_scope_policy"?: boolean;
   "parent_space_id"?: string;
   "kind": string;
   "rank"?: string;
