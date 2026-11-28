@@ -70,8 +70,8 @@ async function submitProjectCard(column: Locator, title: string): Promise<void> 
 }
 
 async function submitProjectBoard(page: Page, title: string): Promise<void> {
-  const form = page.locator(".board-create-popover");
-  const input = form.locator(".new-board-title-input input, .new-board-title-input textarea");
+  const form = page.locator(".board-create-dialog");
+  const input = form.getByRole("textbox");
   await input.fill(title);
   await expect(input).toHaveValue(title);
   await expect(form.locator(".input-empty-prompt")).toHaveCount(0);
@@ -458,7 +458,7 @@ test("three browser-owned members deliver a community event through encrypted di
           card_titles: await flow.page.page.locator(".kanban-card-title").allTextContents(),
           composer: await flow.page.page.locator(".new-card-title-input").evaluateAll(nodes => nodes.map(node => ({ value: (node as HTMLTextAreaElement).value, connected: node.isConnected }))),
           empty_prompts: await flow.page.page.locator(".board-card-composer .input-empty-prompt").count(),
-          board_draft: await flow.page.page.locator(".board-create-popover input, .board-create-popover textarea").evaluateAll(nodes => nodes.map(node => (node as HTMLInputElement).value)),
+          board_draft: await flow.page.page.locator(".board-create-dialog input, .board-create-dialog textarea").evaluateAll(nodes => nodes.map(node => (node as HTMLInputElement).value)),
           board_status: await flow.page.page.locator(".board-status").allTextContents(),
           attachment_status: await flow.page.page.locator(".compose-upload-progress").allTextContents(),
         }), contentType: "application/json",

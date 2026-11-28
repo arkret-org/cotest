@@ -36,7 +36,7 @@ export async function openCardMembers(detail: Locator): Promise<void> {
 
 /** Observe the bound empty-title validation before preparing the original intent. */
 export async function prepareBoardTitle(page: Page, title: string, timeout = 120_000): Promise<void> {
-  const draft = page.locator(".board-create-popover .new-board-title-input :is(input,textarea)");
+  const draft = page.locator(".board-create-dialog").getByRole("textbox");
   await expect(async () => {
     await draft.fill("", { timeout: 3_000 });
     await page.locator(".create-board-space-button").click({ timeout: 3_000 });
