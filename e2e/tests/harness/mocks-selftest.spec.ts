@@ -350,19 +350,17 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     });
     expect(body.applet_package.endpoint_set).toBeUndefined();
     expect(body.applet_package.receive_signals).toBe(false);
-    // The retired field must stay absent; this negative vector is the one place
-    // allowed to name it.
-    expect(body.applet_package.receive_ephemeral).toBeUndefined(); // stale-literal-allow
+    expect(body.applet_package.receive_ephemeral).toBeUndefined();
     expect(body.applet_package.webhook_signature_policy.accepted_signature_algorithms).toContain("ed25519");
     expect(body.applet_package.ghost_policy.enabled).toBe(true);
     expect(body.applet_package.delegation_policy.enabled).toBe(false);
     expect(body.applet_package.e2ee_policy.enabled).toBe(false);
     expect(body.applet_package.proof.payload_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
-    expect(body.applet_package.registration_epoch_evidence).toBeUndefined(); // stale-literal-allow
+    expect(body.applet_package.registration_epoch_evidence).toBeUndefined();
     // Closed mock responses must not expose the retired evidence sibling. The
     // Applet E2E derives it from the DID operation and places it only in the
     // caller-signed registration Event manifest.
-    expect(body.registration_epoch_evidence).toBeUndefined(); // stale-literal-allow
+    expect(body.registration_epoch_evidence).toBeUndefined();
     expect(projectDidToCoreId(body.service_id_document.id)).toBe(body.applet_package.service_id);
 
     const identity = await (await request.get(`${baseUrl}/identity`)).json();

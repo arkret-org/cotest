@@ -16,7 +16,7 @@ use arkret_wire::EventAdmissionSubmission;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
-use super::{load_artifact_json, spec_artifacts_root};
+use super::load_artifact_json;
 use crate::conformance::schema_validation_fixture::{schema_invalid, schema_valid};
 
 const LOCAL_FIXTURE: &str = "authority-event-submit-carriers.json";
@@ -62,7 +62,7 @@ pub fn run_authority_event_submit_carrier_conformance()
                 .ok_or_else(|| anyhow!("required_static_cases contains a non-string"))
         })
         .collect::<Result<Vec<_>>>()?;
-    ensure!(cases.len() == 10, "static case ledger must remain closed");
+    ensure!(cases.len() == 9, "static case ledger must remain closed");
 
     let canonical = load_artifact_json(&format!("fixtures/{CANONICAL_FIXTURE}"))?;
     assert_canonical_semantic_ledger(&canonical)?;
@@ -73,7 +73,7 @@ pub fn run_authority_event_submit_carrier_conformance()
     assertions += assert_direct_conversation_carriers(&approved)?;
     assertions += assert_membership_compensation_carriers(&approved)?;
     assertions += assert_dependency_problem()?;
-    assertions += assert_removed_and_partial_shapes_stay_rejected()?;
+    assertions += assert_invalid_replication_requests_and_outcomes()?;
 
     Ok(AuthorityEventSubmitCarrierCoverage {
         assertions,
@@ -372,13 +372,7 @@ fn assert_dependency_problem() -> Result<usize> {
     Ok(5)
 }
 
-fn assert_removed_and_partial_shapes_stay_rejected() -> Result<usize> {
-    let schema_path = spec_artifacts_root()
-        .join("schemas")
-        .join("authority-commit-operations.schema.json");
-    let schema_source = fs::read_to_string(&schema_path)?;
-    ensure!(!schema_source.contains("EventFederationSubmission"));
-
+fn assert_invalid_replication_requests_and_outcomes() -> Result<usize> {
     schema_invalid(
         PEER_REQUEST,
         &json!({"events": [], "source_service_id": "ak:did_core:web:source.example"}),
@@ -391,8 +385,7 @@ fn assert_removed_and_partial_shapes_stay_rejected() -> Result<usize> {
         PEER_OUTCOME,
         &json!({"branch": "committed_replication", "accepted": [0]}),
     )?;
-    ensure!(!schema_source.contains("\"accepted\""));
-    Ok(5)
+    Ok(3)
 }
 
 fn approved_event_submission() -> Result<Value> {

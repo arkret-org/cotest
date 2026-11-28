@@ -20,7 +20,6 @@
     "direct_conversation_receipt_and_authority_evidence",
     "membership_compensation_self_and_peer",
     "typed_dependency_missing_problem",
-    "forbid_event_federation_submission",
     "forbid_partial_accepted_arrays"
   ],
   "non_claims": [

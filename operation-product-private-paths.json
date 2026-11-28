@@ -59,20 +59,6 @@
     },
     {
       "source": "cotest",
-      "method": "*",
-      "path": "/_arkret/self/schemas",
-      "classification": "product-private",
-      "reason": "Negative-surface probe: schema_policy_realtime/schema.rs asserts these schema-registry endpoints respond 404 unrecognized_endpoint, i.e. it confirms the absence of a schema-registry operation rather than calling one."
-    },
-    {
-      "source": "cotest",
-      "method": "*",
-      "path": "/_arkret/self/schemas/{schema_id}",
-      "classification": "product-private",
-      "reason": "Negative-surface probe: schema_policy_realtime/schema.rs asserts GET/DELETE on a schema resource respond 404 unrecognized_endpoint; confirms the schema-registry operation does not exist, so there is no operation to register."
-    },
-    {
-      "source": "cotest",
       "method": "GET",
       "path": "/_arkret/self/__definitely_does_not_exist__/probe",
       "classification": "product-private",
@@ -84,27 +70,6 @@
       "path": "/_arkret/self/missing",
       "classification": "product-private",
       "reason": "Synthetic unknown path used by api_contracts_auth.rs to assert the canonical 404 unrecognized_endpoint envelope; deliberately not a protocol operation."
-    },
-    {
-      "source": "cotest",
-      "method": "QUERY",
-      "path": "/_arkret/self/events/resolve",
-      "classification": "product-private",
-      "reason": "Negative-surface probe in events_resolve.rs: the retired Event selector endpoint must remain 404; committed Event reads use the registered stream scan and exact Event read operations."
-    },
-    {
-      "source": "cotest",
-      "method": "QUERY",
-      "path": "/_arkret/self/seals/resolve",
-      "classification": "product-private",
-      "reason": "Negative-surface probe in events_resolve.rs: the retired Seal selector endpoint must remain 404."
-    },
-    {
-      "source": "cotest",
-      "method": "QUERY",
-      "path": "/_arkret/self/events/describe",
-      "classification": "product-private",
-      "reason": "Negative-surface probe in events_resolve.rs: the retired Event describe endpoint must remain 404."
     },
     {
       "source": "cotest",
@@ -126,20 +91,6 @@
       "path": "/_arkret/describe",
       "classification": "product-private",
       "reason": "Negative method probe: service-surface-contract.spec.ts, api_contracts_auth.rs and service_surface.rs POST the GET-only /_arkret/describe endpoint to assert a 405 method_not_allowed; the POST binding is intentionally absent, not a protocol operation."
-    },
-    {
-      "source": "cotest",
-      "method": "POST",
-      "path": "/_arkret/self/realms/{realm_id}/agents",
-      "classification": "product-private",
-      "reason": "Negative-surface probe: extension_surface_gaps.rs asserts this realm-scoped agent path responds 404 unrecognized_endpoint (agents are provisioned via /_arkret/self/agents, not a realm sub-resource); confirms absence, not a protocol operation."
-    },
-    {
-      "source": "cotest",
-      "method": "POST",
-      "path": "/_arkret/self/realms/{realm_id}/applets",
-      "classification": "product-private",
-      "reason": "Negative-surface probe: extension_surface_gaps.rs asserts this realm-scoped applet path responds 404 unrecognized_endpoint (applets install via /_arkret/self/applets/install); confirms absence, not a protocol operation."
     },
     {
       "source": "sdk",
@@ -184,13 +135,6 @@
       "method": "POST",
       "path": "/_arkret/self/keys/backup-series/erase",
       "reason": "The exact retired erase probe requires 404/unrecognized_endpoint and an unchanged backup listing; erase_old_material belongs only to the durable transaction worker, with no public self HTTP binding."
-    },
-    {
-      "source": "cotest",
-      "source_file": "src/scenarios/realm_links_live.rs",
-      "method": "GET",
-      "path": "/_arkret/self/realms/{target}/effective-policy",
-      "reason": "The Realm link live scenario requires the retired effective-policy alias to return 404; this path is a negative test and must never be registered or mounted as a protocol operation."
     }
   ]
 }

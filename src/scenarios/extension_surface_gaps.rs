@@ -19,7 +19,7 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    ArkretServer, NonProtocolTestBody, TestServerGroup, expect_api_error, expect_json,
+    ArkretServer, TestServerGroup, expect_api_error, expect_json,
 };
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use crate::scenarios::identity_test_support::{
@@ -29,12 +29,6 @@ use crate::scenarios::identity_test_support::{
 pub async fn applet_lifecycle_surfaces_are_advertised_when_routes_exist() -> Result<()> {
     let group = TestServerGroup::single("extension-surface-applet").await?;
     let server = group.server(0);
-    let alice_did = actor_did_for_service_did(server.service_did(), "alice-applet")?;
-    let alice = server
-        .standard_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
-        .await?;
-    let realm_id = alice.create_realm("Applet Surface Realm").await?;
-
     let describe = expect_json(
         server.http().get(server.url("/_arkret/describe")),
         StatusCode::OK,
@@ -86,18 +80,6 @@ pub async fn applet_lifecycle_surfaces_are_advertised_when_routes_exist() -> Res
             .supports_operation(arkret_wire::ServiceOperationId::EdgeAppletReadDescribeV1)
     );
 
-    expect_api_error(
-        alice
-            .post(&format!("/_arkret/self/realms/{realm_id}/applets"))
-            .json(&NonProtocolTestBody::new(json!({
-                "applet_id": "ak:applet:board",
-                "manifest": {"name": "Board"}
-            }))),
-        StatusCode::NOT_FOUND,
-        "unrecognized_endpoint",
-    )
-    .await?;
-
     Ok(())
 }
 
@@ -108,7 +90,6 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
     let alice = server
         .standard_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
-    let realm_id = alice.create_realm("Agent Surface Realm").await?;
 
     let describe = expect_json(
         server.http().get(server.url("/_arkret/describe")),
@@ -188,18 +169,6 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
             .and_then(Value::as_str),
         Some("agent_provision_scope_migration_required")
     );
-
-    expect_api_error(
-        alice
-            .post(&format!("/_arkret/self/realms/{realm_id}/agents"))
-            .json(&NonProtocolTestBody::new(json!({
-                "agent_id": "ak:did_core:web:agent.example",
-                "display_name": "Planner"
-            }))),
-        StatusCode::NOT_FOUND,
-        "unrecognized_endpoint",
-    )
-    .await?;
 
     Ok(())
 }

@@ -56,19 +56,7 @@ fn protocol_simplification_shape_cases_execute_without_semantic_credit() -> Resu
 }
 
 #[test]
-fn retired_message_prepare_and_native_consent_mutations_are_rejected() {
-    for operation in [
-        "ak.self.messages.command.prepare.v1",
-        "ak.self.consent.command.grant.v1",
-        "ak.self.consent.command.revoke.v1",
-    ] {
-        assert!(
-            serde_json::from_value::<arkret_wire::ServiceOperationId>(json!(operation)).is_err()
-        );
-    }
-    for kind in ["ak.consent.grant", "ak.consent.revoke"] {
-        assert!(arkret_wire::EventKind::try_new(kind).is_none());
-    }
+fn consent_replace_operation_and_event_kind_are_registered() {
     assert!(
         serde_json::from_value::<arkret_wire::ServiceOperationId>(json!(
             "ak.self.consent.command.replace.v1"

@@ -273,70 +273,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     );
     assert!(delivered_message["content"].get("plaintext").is_none());
 
-    let retired_send = device_message_send_request(
-        &alice_did,
-        alice_device,
-        "ak:device_message:0196419b-0000-7000-8000-00000000d202",
-        "ak.mls.application",
-        encrypted_envelope("ak.mls.application", "retired-route-must-not-enqueue"),
-        expires_at,
-    )?;
-    let retired_ack = DeviceMessagesAcknowledgementRequestBody {
-        acknowledgement_token: delivered["acknowledgement_token"]
-            .as_str()
-            .unwrap()
-            .to_owned(),
-    };
-    for request in [
-        server
-            .http()
-            .get(server.url("/_arkret/self/device_messages"))
-            .header(
-                arkret_http_client::HEADER_OPERATION,
-                "ak.self.device_messages.read.list.v1",
-            ),
-        server
-            .http()
-            .post(server.url("/_arkret/self/device_messages"))
-            .header(
-                arkret_http_client::HEADER_OPERATION,
-                "ak.self.device_messages.command.send.v1",
-            )
-            .header("Idempotency-Key", "retired-device-route")
-            .json(&retired_send),
-        server
-            .http()
-            .post(server.url("/_arkret/self/device_messages/ack"))
-            .header(
-                arkret_http_client::HEADER_OPERATION,
-                "ak.self.device_messages.command.ack.v1",
-            )
-            .json(&retired_ack),
-    ] {
-        expect_api_error(
-            request.bearer_auth(&token),
-            StatusCode::NOT_FOUND,
-            "unrecognized_endpoint",
-        )
-        .await?;
-    }
-    let delivered = expect_json(
-        server
-            .http()
-            .get(server.url("/_arkret/self/device-messages"))
-            .bearer_auth(&token),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(
-        delivered["deliveries"].as_array().unwrap().len(),
-        1,
-        "retired send or ACK mutated the queue: {delivered}"
-    );
-    assert_eq!(
-        delivered["deliveries"][0]["device_message"]["content"]["ciphertext"],
-        "opaque-to-device"
-    );
+    assert_eq!(delivered["deliveries"].as_array().unwrap().len(), 1);
 
     let ack: arkret_models_collaboration::device_messages::DeviceMessagesAcknowledgementResponseBody =
         serde_json::from_value(

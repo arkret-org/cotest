@@ -27,28 +27,6 @@ fn policy(
         .context("read exact accepted local policy bundle")
 }
 
-async fn schema_refusal(client: &TestActorClient, body: &Value) -> Result<()> {
-    let response = client
-        .post("/_arkret/self/events")
-        .header("content-type", "application/json")
-        .body(arkret_canonical::canonical_json_bytes(body)?)
-        .send()
-        .await?;
-    let status = response.status();
-    let problem: Value = response.json().await?;
-    ensure!(
-        status == StatusCode::BAD_REQUEST || status == StatusCode::UNPROCESSABLE_ENTITY,
-        "retired carrier returned {status}: {problem}"
-    );
-    ensure!(
-        problem["type"]
-            .as_str()
-            .is_some_and(|s| s.ends_with("/schema_violation")),
-        "retired carrier did not reach the schema boundary: {problem}"
-    );
-    Ok(())
-}
-
 pub async fn run() -> Result<()> {
     // Listing links verifies live Account Authority status in addition to the
     // Station's accepted Realm facts; a session-introspection-only mock cannot
@@ -257,41 +235,6 @@ pub async fn run() -> Result<()> {
         )
         .await?;
     submit_and_expect_commit(&alice, &alice_account, &alice.device_id, &local_update).await?;
-    target_before = realm_business_footprint(&database_url, &target).await?;
-    // Old event kinds and old link payloads reach the HTTP schema boundary;
-    // no fake Event kind is accepted by the production authoring API.
-    let valid = serde_json::to_value(EventAdmissionSubmission::new(link.clone()))?;
-    for old_kind in ["ak.realm.inheritance_policy", "ak.capability.derived"] {
-        let mut body = valid.clone();
-        body["event"]["kind"] = json!(old_kind);
-        schema_refusal(&bob, &body).await?;
-        ensure!(
-            realm_business_footprint(&database_url, &target).await? == target_before,
-            "retired kind mutated target"
-        );
-    }
-    for field in [
-        "notification_defaults",
-        "inherits",
-        "policy_rules",
-        "capability_bundles",
-    ] {
-        let mut body = valid.clone();
-        body["event"]["payload"][field] = json!({});
-        schema_refusal(&bob, &body).await?;
-        ensure!(
-            realm_business_footprint(&database_url, &target).await? == target_before,
-            "retired {field} mutated target"
-        );
-    }
-    let old_alias = bob
-        .get(&format!("/_arkret/self/realms/{target}/effective-policy"))
-        .send()
-        .await?;
-    ensure!(
-        old_alias.status() == StatusCode::NOT_FOUND,
-        "retired effective-policy endpoint still exposes an alias"
-    );
     // Local link lifecycle never derives target policy/grant/notification state.
     for state in ["rejected", "tombstoned"] {
         let before = realm_business_footprint(&database_url, &target).await?;

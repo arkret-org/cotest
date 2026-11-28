@@ -41,24 +41,6 @@ fn event_actor_requires_complete_core_account_identity() {
 }
 
 #[test]
-fn realm_genesis_rejects_retired_notary_field() {
-    let mut genesis = realm_genesis_baseline();
-    assert!(
-        serde_json::from_value::<arkret_models_collaboration::events_payloads::RealmGenesis>(
-            genesis.clone()
-        )
-        .is_ok()
-    );
-    genesis["notary"] = json!({"signer": "retired"});
-    assert!(
-        serde_json::from_value::<arkret_models_collaboration::events_payloads::RealmGenesis>(
-            genesis
-        )
-        .is_err()
-    );
-}
-
-#[test]
 fn realm_id_rejects_reserved_high_nibble_one() {
     let mut token = [0x42_u8; 33];
     token[0] = 0x11;

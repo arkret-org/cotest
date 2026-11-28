@@ -666,12 +666,12 @@
     {
       "source": "cotest/e2e/tests/models/realm-links.spec.ts",
       "disposition": "migrated",
-      "coverage_status": "static_clean_break_only",
-      "remaining_gap": "The retired positive inheritance flow was deleted. Static artifact checks prove that policy, capability and notification propagation have no current-v1 wire carrier; a production Coland durable migration/zero-write runner remains open and is documented in e2e/scenarios/models/realm-links.md.",
+      "coverage_status": "partial",
+      "remaining_gap": "The native Realm link scenario covers target-local authorization and explicit link lifecycle. The parent-membership schema checks do not exercise admission on a live Station.",
       "replacements": [
         {
-          "file": "cotest/tests/realm_link_clean_break.rs",
-          "symbol": "rejects_automatic_realm_inheritance_without_current_v1_carrier"
+          "file": "cotest/tests/realm_links_live.rs",
+          "symbol": "realm_links_never_cascade_policy_capability_or_notification"
         },
         {
           "file": "cotest/tests/realm_link_clean_break.rs",

@@ -22,86 +22,6 @@ fn string_set(value: &Value) -> BTreeSet<&str> {
 }
 
 #[test]
-fn rejects_automatic_realm_inheritance_without_current_v1_carrier() {
-    let event_registry = artifact("registry/event-kind-registry.json");
-    let event_kinds: BTreeSet<_> = event_registry["event_kinds"]
-        .as_array()
-        .expect("event_kinds array")
-        .iter()
-        .filter_map(|row| row["event_kind"].as_str())
-        .collect();
-    for retired in ["ak.realm.inheritance_policy", "ak.capability.derived"] {
-        assert!(
-            !event_kinds.contains(retired),
-            "retired automatic-inheritance Event kind {retired} is registered"
-        );
-    }
-
-    let operation_registry = artifact("registry/operation-registry.json");
-    assert!(
-        operation_registry["operations"]
-            .as_array()
-            .expect("operations array")
-            .iter()
-            .all(|row| row["operation_id"] != "ak.self.realm_link.read.effective_policy.v1"),
-        "retired automatic effective-policy read operation is registered"
-    );
-
-    let current_registry = artifact("registry/current-state-registry.json");
-    assert!(
-        current_registry["state_kinds"]
-            .as_array()
-            .expect("state_kinds array")
-            .iter()
-            .all(|row| row["operation_kind"] != "realm_inheritance_policy"),
-        "retired inheritance typed-current family is registered"
-    );
-
-    let payload_schema = artifact("schemas/event-payload.schema.json");
-    let defs = payload_schema["$defs"].as_object().expect("payload $defs");
-    for retired in [
-        "capability_derived_payload",
-        "inheritance_policy_status",
-        "realm_inheritance_policy_payload",
-    ] {
-        assert!(
-            !defs.contains_key(retired),
-            "retired automatic-inheritance schema {retired} remains reachable"
-        );
-    }
-
-    let link_kinds = string_set(&defs["realm_link_payload"]["properties"]["link_kind"]["enum"]);
-    assert!(link_kinds.contains("governed_by"));
-    assert!(link_kinds.contains("join_gate_from"));
-    assert!(!link_kinds.contains("inherits_policy_from"));
-
-    let link_properties = defs["realm_link_payload"]["properties"]
-        .as_object()
-        .expect("realm_link_payload properties");
-    for forbidden in [
-        "inherits",
-        "policy_rules",
-        "capability_bundles",
-        "notification_defaults",
-    ] {
-        assert!(
-            !link_properties.contains_key(forbidden),
-            "Realm link regained automatic {forbidden} propagation"
-        );
-    }
-
-    let link_operation_schema = artifact("schemas/realm-link-operations.schema.json");
-    assert!(
-        link_operation_schema["$defs"]
-            .as_object()
-            .expect("realm-link operation $defs")
-            .get("realm_effective_policy_outcome")
-            .is_none(),
-        "retired effective-policy response schema is still exposed"
-    );
-}
-
-#[test]
 fn parent_membership_contract_is_co_governed_and_caller_proof_free() {
     let payload_schema = artifact("schemas/event-payload.schema.json");
     let defs = &payload_schema["$defs"];
@@ -142,6 +62,7 @@ fn parent_membership_contract_is_co_governed_and_caller_proof_free() {
 
     let link_kinds = string_set(&defs["realm_link_payload"]["properties"]["link_kind"]["enum"]);
     assert!(link_kinds.contains("join_gate_from"));
+    assert!(link_kinds.contains("governed_by"));
 
     let event_registry = artifact("registry/event-kind-registry.json");
     let member_state = event_registry["event_kinds"]

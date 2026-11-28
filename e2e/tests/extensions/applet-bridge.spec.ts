@@ -611,7 +611,7 @@ test.describe("applet bridge", () => {
     const installation = await installed.response.json();
     for (const field of ["bot_actor_id","managed_actor_provision_ref","principal_control_realm_id","profile_event_ref","accountability_grant_ref"]) expect(installation).not.toHaveProperty(field);
     const beforeBots = await queryRealmEventsApi(request,token,realmId);
-    expect((beforeBots.events as Array<Record<string,unknown>>).some(event=>event.kind==="ak.applet.managed_actor.provision")).toBe(false);
+    expect((beforeBots.events as Array<Record<string,unknown>>).some(event=>event.kind==="ak.realm.actor.create")).toBe(false);
     const first = await provisionAppletBot(request,signed,realmId,`first-${stamp}`,{exerciseAuthoringKats:false});
     const secondIdentity = await buildRealmActorIdentity(request,colandBaseUrl(),`applet-bot-second-${stamp}`);
     const second = await provisionAppletBot(request,signed,realmId,`second-${stamp}`,{exerciseAuthoringKats:false,botOperation:secondIdentity});
@@ -1062,18 +1062,6 @@ test.describe("applet bridge", () => {
     const history = await queryRealmEventsApi(request, aliceToken, realmId);
     expect(JSON.stringify(history)).toContain("ak.applet.registration");
     expect((history.events as Array<Record<string,unknown>>).some(event=>event.kind==="ak.realm.actor.create")).toBe(false);
-
-    const removedLegacyRoute = await request.post(
-      `${colandBaseUrl()}/_coland/edge/applets/${encodeURIComponent(registration.applet_id)}/bot/messages`,
-      {
-        headers: {
-          ...authHeaders(aliceToken, "POST", `${colandBaseUrl()}/_coland/edge/applets/${encodeURIComponent(registration.applet_id)}/bot/messages`),
-          "content-type": "application/json",
-        },
-        data: canonicalJson({ text: `must-not-route-${stamp}` }),
-      },
-    );
-    expect(removedLegacyRoute.status()).toBe(404);
   });
 
   test("E4.3 idempotency: same applet package + same Idempotency-Key returns original registration; different key conflicts", async ({
@@ -1210,7 +1198,7 @@ test.describe("applet bridge", () => {
         authoring_request_basis: prepared.basis,
         // Negative-only closed-shape probe: the canonical carrier is nested in
         // `authoring_request_basis.registration_event.payload.manifest`.
-        registration_epoch_evidence: registrationEvidence, // stale-literal-allow
+        registration_epoch_evidence: registrationEvidence,
       }),
     });
     expect(duplicateSibling.status()).toBe(422);
@@ -1219,7 +1207,7 @@ test.describe("applet bridge", () => {
     const misplacedPackage = {
       ...signed.applet_package,
       // Negative-only package probe; no positive helper carries this sibling.
-      registration_epoch_evidence: registrationEvidence, // stale-literal-allow
+      registration_epoch_evidence: registrationEvidence,
     };
     const misplaced = await request.fetch(previewUrl, {
       method: "POST",

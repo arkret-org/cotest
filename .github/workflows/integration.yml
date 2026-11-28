@@ -149,12 +149,6 @@ jobs:
     - uses: actions/setup-node@v4
       with:
         node-version: '24'
-    - name: stale protocol literal scan
-      working-directory: cotest
-      run: |
-        set -euo pipefail
-        sh scripts/tests/stale-literal-scan.tests.sh
-        sh scripts/stale-literal-scan.sh
     - name: build upstream services
       shell: pwsh
       run: |

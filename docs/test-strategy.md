@@ -50,7 +50,7 @@ asserts only public HTTP behavior plus limited `arkret-rust-sdk` smoke paths.
   push device registration, and ICE config behavior.
 - `interaction_models`: message revision/redaction, reactions, read markers,
   subscriptions, entity CRUD, relations, and view projections.
-- `schema_policy_realtime`: schema registry, policy documents, typing
+- `schema_policy_realtime`: policy documents, typing
   ephemerals, push rules, and WebRTC signaling sessions.
 - `extension_surface_gaps`: executable checks for current applet/agent surface
   gaps so missing routes are tracked by tests instead of ignored placeholders.

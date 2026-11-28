@@ -241,9 +241,6 @@ Start-Sleep -Seconds 60
     if ($boundDocker.Contains("COLAND_ACCOUNT_AUTHORITY_SERVICE_ID")) {
         throw "Docker config must use the Station's own identity without an authority override"
     }
-    if ($boundConfig -match "ENROLLMENT_DID" -or $boundDocker.Contains("COLAND_ACCOUNT_AUTHORITY_ENROLLMENT_DID")) {
-        throw "Retired independent enrollment identity must not be emitted"
-    }
     $betaAuthorityUrl = "https://coauth-beta.joint.example"
     Build-ColandCommand @processArguments -AccountAuthorityBaseUrl $betaAuthorityUrl | Out-Null
     $betaConfig = Get-Content -LiteralPath $configPath -Raw

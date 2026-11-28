@@ -251,10 +251,7 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
                     .context("Signal source-cut carrier cases")?;
                 for carrier in carrier_cases {
                     let mut value = serde_json::to_value(&signal)?;
-                    if carrier["scope"] == "circle" {
-                        value["scope_ref"] = serde_json::json!({"kind":"circle","realm_id":signal.realm_id,
-                            "circle_id":"ak:circle:AbyX-ijAQZ4DkcySKE3VusrcCoBFT8DGS4fx8tpo-PNm"});
-                    }
+                    ensure!(carrier["scope"] == "realm", "unregistered Signal scope");
                     match carrier["parent"].as_str().context("parent cut presence")? {
                         "present" => {
                             value["parent_realm_authority_commit_id"] =

@@ -21,7 +21,6 @@
     "identity/registration-continuation.spec.ts",
     "joint/agent-savfox-split-live.spec.ts",
     "joint/build-identity.spec.ts",
-    "joint/retired-routes.spec.ts",
     "joint/contact-agent-sidebar.spec.ts",
     "joint/joint-inkson-smoke.spec.ts",
     "joint/multi-profile-same-server.spec.ts",

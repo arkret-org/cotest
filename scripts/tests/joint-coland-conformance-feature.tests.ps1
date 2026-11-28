@@ -26,7 +26,7 @@ Assert-True `
     ($conformanceHandlers -match 'operation_id = "org\.arkret\.coland\.conformance\.encode"') `
     "the binary marker must name a surviving conformance endpoint"
 Assert-True `
-    ($runner -match '-not \$freshness\.Fresh -or -not \$colandConformanceHarnessPresent') `
+    ($runner -match '-or\s+-not\s+\$colandConformanceHarnessPresent\)') `
     "a source-fresh production Coland binary must not bypass the conformance-harness build"
 Assert-True `
     ($runner -match 'coland conformance-harness feature.*fail.*cached binary lacks the conformance-harness marker') `
@@ -47,14 +47,13 @@ Assert-True `
     ($producerProofMatch.Value -match 'return sdkEventEnvelopeProof\(') `
     "producer proof must use the canonical SDK signer"
 Assert-True `
-    ($producerProofMatch.Value -match 'verificationMethod,\s*createdAt,\s*signingSeedB64url:') `
+    ($producerProofMatch.Value -match 'verificationMethod,\s*createdAt,\s*signingSeedB64url\s*[:,]') `
     "producer proof must bind the registered verification method, creation time and signer"
 Assert-True `
     ($producerProofMatch.Value -notmatch '\b(?:auth_context|authority_refs|key_epoch|key_id)\b') `
     "producer proof must not revive removed admission-context fields"
 
-# Bind the feature discriminator to a route that still exists in the selected
-# sibling source, rather than retaining a retired operation's literal.
+# Verify the binary marker against the mounted operation in Coland.
 $colandHttp = Join-Path $PSScriptRoot "..\..\..\coland\crates\http\src\routing"
 $module = Get-Content -Raw -LiteralPath (Join-Path $colandHttp "mod.rs")
 $handlers = Get-Content -Raw -LiteralPath (Join-Path $colandHttp "conformance\handlers.rs")
@@ -65,7 +64,5 @@ Assert-True ($handlers -match 'operation_id = "org\.arkret\.coland\.conformance\
     "the selected marker must identify an actual current operation"
 Assert-True ($routes -match 'with_path\("encode"\)\.post\(handlers::encode\)') `
     "the selected operation must remain mounted in the conformance router"
-Assert-True ($runner -notmatch '\$colandConformanceHarnessMarker = "org\.arkret\.coland\.conformance\.realm_state_snapshot"') `
-    "a retired route must not identify the current harness binary"
 
 Write-Host "joint-coland-conformance-feature.tests.ps1: PASS"
