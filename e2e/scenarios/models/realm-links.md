@@ -19,7 +19,7 @@ capability、policy、retention 与 notification 状态。
 - 同文 §3 — 标准 link kind closed set；
 - 同文 §5 — membership、capability、policy、retention、notification 等不得隐式级联；
 - 同文 §6 — 每个目标 Realm 必须由本 Realm controller／issuer 分别签发本地 Event；
-- `arkret-work/decisions/0046-realm-inheritance-clean-break-and-co-governed-join-gate.md`。
+- [当时的 0046 裁决](https://github.com/arkret-org/arkret-work/blob/e663133fc3fca3167887f46ef54b24dba9f3432b/decisions/0046-realm-inheritance-clean-break-and-co-governed-join-gate.md)。
 
 ## Static conformance（已落地）
 
