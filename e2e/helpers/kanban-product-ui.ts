@@ -142,7 +142,8 @@ export async function addBoardList(page: Page, title: string): Promise<Locator> 
   void acceptance.catch(() => {});
   let activated = false;
   await expect(async () => {
-    const value = await input.inputValue();
+    if (activated && !(await composer.isVisible())) return;
+    const value = await input.inputValue({ timeout: 3_000 });
     if (value === "") {
       expect(activated, "the List draft clears only after the ordinary submission handoff").toBe(true);
       return;
@@ -151,7 +152,7 @@ export async function addBoardList(page: Page, title: string): Promise<Locator> 
     await expect(submit).toBeEnabled({ timeout: 3_000 });
     await submit.click({ timeout: 3_000 });
     activated = true;
-    await expect(input).toHaveValue("", { timeout: 1_000 });
+    await expect(composer).toBeHidden({ timeout: 1_000 });
   }).toPass({ timeout: 90_000, intervals: [250, 500, 1_000] });
   const response = await acceptance;
   const event = listEvent(response)!;
