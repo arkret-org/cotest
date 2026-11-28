@@ -3,13 +3,13 @@ import { assertAuthoritySubmitOutcome, sdkEventDerivedIds, wireErrCode } from ".
 import { decodeEventIngressBody, ingressEvents } from "./event-ingress";
 
 export function newBoardTrigger(page: Page): Locator {
-  return page.locator(".board-popover-host").getByRole("button", { name: "New board", exact: true });
+  return page.getByRole("menuitem", { name: "New Board", exact: true });
 }
 
 export async function openBoardOptions(page: Page, options?: { timeout?: number }): Promise<void> {
-  const disclosure = page.locator(".board-toolbar-options > .sapid-collapsible-trigger");
-  if (await disclosure.count() && await disclosure.getAttribute("aria-expanded") !== "true") {
-    await disclosure.click(options);
+  const trigger = page.getByRole("button", { name: "Board options", exact: true });
+  if (await trigger.getAttribute("aria-expanded", options) !== "true") {
+    await trigger.click(options);
   }
 }
 
