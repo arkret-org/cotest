@@ -412,6 +412,7 @@ async fn run_owned_native_case(case: &str) -> Result<()> {
     ensure!(
         [
             "prepared_inventory",
+            "local_rekey",
             "same_session_race",
             "pre_accept_kill",
             "post_accept_response_loss_restart",
@@ -453,9 +454,20 @@ async fn run_owned_native_case(case: &str) -> Result<()> {
         "native authorities resolve to the same physical PostgreSQL database"
     );
     let authority = recovery::prepare_recovery_authority(&fixture.client).await?;
-    let material = if case == "prepared_inventory" {
+    let material = if matches!(case, "prepared_inventory" | "local_rekey") {
         inventory::observe_transitions(&station_database).await?;
         Some(crate::harness::heap_future(|| inventory::provision(&fixture, &authority)).await?)
+    } else {
+        None
+    };
+    let old_message = if case == "local_rekey" {
+        Some(
+            inventory::freeze_old_message(
+                material.as_ref().context("missing group")?,
+                &fixture.server,
+            )
+            .await?,
+        )
     } else {
         None
     };
@@ -465,7 +477,7 @@ async fn run_owned_native_case(case: &str) -> Result<()> {
     let before = station_footprint(&station_database).await?;
     let initial_processes = json!({"station":process_evidence(fixture.server.native_process_identity()?)?,"coauth":process_evidence(deployment.coauth.server.native_process_identity()?)?});
     let result = match case {
-        "prepared_inventory" => {
+        "prepared_inventory" | "local_rekey" => {
             let completed = prepared.submit_native().await?;
             let grant = issue(&http, &origin, &completed).await?;
             let client = accepted_client(&fixture, &completed, &grant)?;
@@ -495,7 +507,24 @@ async fn run_owned_native_case(case: &str) -> Result<()> {
                 first == second,
                 "restart changed the fixed recovery inventory"
             );
-            second
+            if case == "local_rekey" {
+                crate::harness::heap_future(|| {
+                    inventory::rekey(
+                        &client,
+                        material,
+                        &second,
+                        &station_database,
+                        completed
+                            .completion
+                            .completion_attestation
+                            .new_model_generation_ref,
+                        old_message.as_ref().expect("local rekey message"),
+                    )
+                })
+                .await?
+            } else {
+                second
+            }
         }
         "same_session_race" => {
             let mut competing = request.clone();
@@ -951,7 +980,7 @@ async fn run_owned_native_case(case: &str) -> Result<()> {
         }
         _ => unreachable!(),
     };
-    let instrumentation = if case == "prepared_inventory" {
+    let instrumentation = if matches!(case, "prepared_inventory" | "local_rekey") {
         "case-owned AFTER trigger observes native state writes; read-only checks compare durable originals, root backup and private inventory"
     } else {
         "temporary SQL trigger/lock in the case-owned database only; cleaned before success"

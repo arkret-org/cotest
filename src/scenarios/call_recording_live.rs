@@ -184,7 +184,7 @@ async fn genesis(
     Ok((group, accepted))
 }
 
-fn material_request(
+pub(crate) fn material_request(
     member: &Member,
     current: &MlsGroupValue,
     state: &CommittedEventFullView,

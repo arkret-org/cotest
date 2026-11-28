@@ -3,6 +3,9 @@ use arkret_crypto::content_history::{ContentRootBackupAuthor, ContentRootBackupD
 use arkret_models_crypto::*;
 use arkret_wire::{ActorId, EventKind, ScopeRef};
 
+mod rekey;
+pub(super) use rekey::run as rekey;
+
 use super::*;
 use crate::scenarios::mls_lifecycle_live::{ACTIVE_SUITE, Member, accepted_full_view};
 
@@ -16,6 +19,7 @@ pub(super) struct Material {
     packet: KeyBackup,
     owner: Member,
     recipient: [u8; 32],
+    recipient_public: [u8; 32],
 }
 
 async fn upload(client: &TestActorClient, bytes: &[u8]) -> Result<Value> {
@@ -317,6 +321,7 @@ pub(super) async fn provision(
         packet,
         owner,
         recipient: material.backup_hpke_serialized_private_key,
+        recipient_public: material.backup_hpke_public_key,
     })
 }
 
@@ -649,4 +654,21 @@ pub(super) async fn verify(
     Ok(
         json!({"transitions":transitions,"preparation":preparation,"inventory_digest":digest,"entry":entry,"empty_realm_entry":empty,"genesis_commit":original.commit.commit_id,"profile_event":profile.event.event_id,"profile_commit":profile.commit.commit_id,"coverage":coverage,"backup_id":packet.backup_id,"root_ref":material.root.root_ref,"range":206,"old_device_status":denied.status().as_u16()}),
     )
+}
+
+pub(super) async fn freeze_old_message(
+    material: &Material,
+    station: &crate::harness::ArkretServer,
+) -> Result<arkret_wire::Event> {
+    let owner = &material.owner;
+    let realm = &material.empty_group.realm_id;
+    crate::scenarios::human_device_producer_live::grant_message_create(
+        &owner.client,
+        station,
+        realm.as_str(),
+        &owner.account,
+    )
+    .await?;
+    let strand = owner.client.default_strand_id(realm.as_str())?;
+    owner.client.author_event(realm.as_str(),EventKind::MessageCreate.as_str(),json!({"strand_id":strand,"track_name":"discussion","content":arkret::ContentBlock::text("queued on the old device")})).await
 }

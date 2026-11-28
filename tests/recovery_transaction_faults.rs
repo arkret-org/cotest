@@ -72,3 +72,12 @@ async fn recovery_native_prepared_inventory_original_and_root() -> Result<()> {
     )
     .await
 }
+
+/// Gating: real replacement Device, prepared PCR and empty Realm.
+/// Tier: live
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "requires owned Coland and Coauth executables with independent PostgreSQL"]
+async fn recovery_native_local_rekey_prepared_groups() -> Result<()> {
+    cotest::conformance::recovery_transaction_faults::run_native_recovery_fault_case("local_rekey")
+        .await
+}

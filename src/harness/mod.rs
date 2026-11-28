@@ -64,6 +64,7 @@ pub use server::{
     ServiceRouteControl, ServiceRouteRelay, ServiceRouteSigner, TestServerGroup,
 };
 pub(crate) use server::{ReservedPort, reserve_port, test_service_signing_key};
+pub(crate) use wire_body::withhold_station_receipt;
 pub use wire_body::{CanonicalJsonBody, NonProtocolTestBody};
 
 static NEXT_EVENT_SEQ: AtomicU64 = AtomicU64::new(1);

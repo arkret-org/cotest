@@ -137,85 +137,6 @@ async fn worker(dir: &Path, phase: &str) -> Result<()> {
     Ok(())
 }
 
-/// Forward all signed headers and exact body bytes using the real Station's TLS client.
-/// Once the Station accepts the request, close the caller's socket before sending a receipt.
-async fn lose_receipt(builder: reqwest::RequestBuilder) -> Result<()> {
-    use reqwest::header::{CONTENT_LENGTH, HOST, HeaderMap, HeaderName, HeaderValue};
-    use tokio::io::{AsyncBufReadExt as _, AsyncReadExt as _, BufReader};
-    let (upstream, request) = builder.build_split();
-    let request = request?;
-    let target = request.url().clone();
-    ensure!(
-        matches!(target.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"))
-            && target.query().is_none()
-    );
-    let method = request.method().clone();
-    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await?;
-    let local = format!("http://{}{}", listener.local_addr()?, target.path());
-    let downstream = reqwest::Client::builder()
-        .no_proxy()
-        .build()?
-        .request(method.clone(), local)
-        .headers(request.headers().clone())
-        .body(
-            request
-                .body()
-                .and_then(reqwest::Body::as_bytes)
-                .context("signed JSON")?
-                .to_vec(),
-        );
-    let relay = async move {
-        let (stream, _) = listener.accept().await?;
-        let mut incoming = BufReader::new(stream);
-        let mut line = String::new();
-        incoming.read_line(&mut line).await?;
-        ensure!(line.trim_end() == format!("{method} {} HTTP/1.1", target.path()));
-        let mut headers = HeaderMap::new();
-        loop {
-            line.clear();
-            ensure!(incoming.read_line(&mut line).await? > 0 && line.len() <= 65536);
-            if line == "\r\n" {
-                break;
-            }
-            let (name, value) = line.split_once(':').context("HTTP field")?;
-            headers.append(
-                HeaderName::from_bytes(name.as_bytes())?,
-                HeaderValue::from_str(value.trim())?,
-            );
-        }
-        let length = headers
-            .get(CONTENT_LENGTH)
-            .context("signed content length")?
-            .to_str()?
-            .parse::<usize>()?;
-        ensure!((1..2 * 1024 * 1024).contains(&length));
-        headers.remove(HOST);
-        let mut bytes = vec![0; length];
-        incoming.read_exact(&mut bytes).await?;
-        let response = upstream
-            .request(method, target)
-            .headers(headers)
-            .body(bytes)
-            .send()
-            .await?;
-        let status = response.status();
-        if status != StatusCode::OK {
-            let problem: arkret_wire::Problem = response.json().await?;
-            bail!("H declined fault-injection request: {status} {problem:?}");
-        }
-        // No response bytes are written to the downstream socket.
-        drop(incoming);
-        anyhow::Ok(())
-    };
-    let (forwarded, received) = tokio::time::timeout(Duration::from_secs(40), async {
-        tokio::join!(relay, downstream.send())
-    })
-    .await?;
-    forwarded?;
-    ensure!(received.is_err(), "runtime received an acknowledgement");
-    Ok(())
-}
-
 pub(super) async fn join_and_publish(
     deployment: coauth_session_evidence::ActualAgentDeployment,
     controller: Member,
@@ -442,7 +363,7 @@ async fn run(
         "arkret-key-backup-{}",
         arkret_canonical::canonical_sha256(&packet)?.trim_start_matches("sha256:")
     );
-    lose_receipt(
+    crate::harness::withhold_station_receipt(
         runtime
             .put(&format!("/_arkret/self/keys/backups/{}", packet.backup_id))
             .header("idempotency-key", idempotency)
@@ -508,7 +429,7 @@ async fn run(
             .post("/_arkret/self/events")
             .canonical_json(&arkret_wire::EventAdmissionSubmission::new(e.clone()))
     };
-    lose_receipt(submit(&first)?).await?;
+    crate::harness::withhold_station_receipt(submit(&first)?).await?;
     heap_future(|| deployment.station.restart_external_process()).await?;
     let controller_sdk = controller.client.sdk();
     let recovered = heap_future(|| controller_sdk.committed_event_get(&first.event_id)).await?;
