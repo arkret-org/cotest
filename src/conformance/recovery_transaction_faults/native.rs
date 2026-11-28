@@ -1,5 +1,6 @@
 //! Destructive native Recovery cases. Each case owns its actual Station,
 //! Coauth, process custody and independent PostgreSQL databases.
+mod inventory;
 mod process;
 mod sql;
 
@@ -410,6 +411,7 @@ pub fn run_native_recovery_fault_case(
 async fn run_owned_native_case(case: &str) -> Result<()> {
     ensure!(
         [
+            "prepared_inventory",
             "same_session_race",
             "pre_accept_kill",
             "post_accept_response_loss_restart",
@@ -451,12 +453,50 @@ async fn run_owned_native_case(case: &str) -> Result<()> {
         "native authorities resolve to the same physical PostgreSQL database"
     );
     let authority = recovery::prepare_recovery_authority(&fixture.client).await?;
+    let material = if case == "prepared_inventory" {
+        inventory::observe_transitions(&station_database).await?;
+        Some(crate::harness::heap_future(|| inventory::provision(&fixture, &authority)).await?)
+    } else {
+        None
+    };
     let prepared = recovery::prepare_native(&fixture, &authority.method, authority.seed).await?;
     let request = prepared.create.clone();
     let transaction = request.recovery_receipt.transaction_id.to_string();
     let before = station_footprint(&station_database).await?;
     let initial_processes = json!({"station":process_evidence(fixture.server.native_process_identity()?)?,"coauth":process_evidence(deployment.coauth.server.native_process_identity()?)?});
     let result = match case {
+        "prepared_inventory" => {
+            let completed = prepared.submit_native().await?;
+            let grant = issue(&http, &origin, &completed).await?;
+            let client = accepted_client(&fixture, &completed, &grant)?;
+            let material = material.as_ref().context("missing accepted PCR material")?;
+            let first = crate::harness::heap_future(|| {
+                inventory::verify(
+                    &client,
+                    &completed.completion,
+                    material,
+                    &station_database,
+                    &fixture.server,
+                )
+            })
+            .await?;
+            fixture.server.restart_external_process().await?;
+            let second = crate::harness::heap_future(|| {
+                inventory::verify(
+                    &client,
+                    &completed.completion,
+                    material,
+                    &station_database,
+                    &fixture.server,
+                )
+            })
+            .await?;
+            ensure!(
+                first == second,
+                "restart changed the fixed recovery inventory"
+            );
+            second
+        }
         "same_session_race" => {
             let mut competing = request.clone();
             competing.recovery_receipt.transaction_id =
@@ -911,7 +951,12 @@ async fn run_owned_native_case(case: &str) -> Result<()> {
         }
         _ => unreachable!(),
     };
-    let artifact = json!({"case":case,"actual_processes":initial_processes,"database_topology":{"station":station_identity,"account_authority":issuer_identity},"test_instrumentation":"temporary SQL trigger/lock in the case-owned database only; cleaned before success","observations":result,"execution":"this artifact is written only after the actual native case completed"});
+    let instrumentation = if case == "prepared_inventory" {
+        "case-owned AFTER trigger observes native state writes; read-only checks compare durable originals, root backup and private inventory"
+    } else {
+        "temporary SQL trigger/lock in the case-owned database only; cleaned before success"
+    };
+    let artifact = json!({"case":case,"actual_processes":initial_processes,"database_topology":{"station":station_identity,"account_authority":issuer_identity},"test_instrumentation":instrumentation,"observations":result,"execution":"this artifact is written only after the actual native case completed"});
     if let Some(directory) = std::env::var_os("COTEST_NATIVE_OPERATION_EVIDENCE_DIR") {
         std::fs::write(
             std::path::PathBuf::from(directory).join(format!("recovery-native-{case}.json")),
