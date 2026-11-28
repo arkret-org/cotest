@@ -7,7 +7,7 @@
 1. 正式适用合同与实际 producer／admission／read／delivery consumer 一致；合法前置真的抵达目标判定点。
 2. 正例产生期望业务状态；错身份／scope／current／签名／CAS、撤权与隐私反例按注册结果拒绝，相关接受事务无部分写入。
 3. 并发、exact replay、响应丢失、取消、crash／restart 保留原材料与原结果，迟到结果不能写入新会话；适用容量预算在真实路径测量。
-4. 该 owner 的实际具名集合在同一冻结源码、lock、features、配置与 SUT 组合中非空执行、自然成功、无失败／跳过／预期失败，结果来源可核。最终跨仓联合组合仍由既有 0900 承接。
+4. 该 owner 的实际具名集合在同一冻结源码、lock、features、配置与 SUT 组合中非空执行、自然成功、无失败／跳过／预期失败，结果来源可核。最终跨仓联合组合见[第五阶段的发布验收](../../arkret-work/tasks/impl-tailin/05-release-and-deployment.md)。
 
 生成/KAT等价、纵向清理和Linux安全打包应在所属仓完成。Cotest只承接能跨真实客户端／服务观察的行为；为未挂载provider或缺生产consumer写一个固定成功fixture没有验收价值。
 

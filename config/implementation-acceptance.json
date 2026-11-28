@@ -36,8 +36,8 @@
     },
     {
       "task": "2026-09-06-0915-protocol-fixtures-mock-and-api-test-convergence.md",
-      "criteria_count": 2,
-      "criteria_sha256": "aae56858500bfcc3382ea7b5115fb8f8d79ac4e32f1109a12be38fe6f09442bd",
+      "criteria_count": 4,
+      "criteria_sha256": "e976a04b163069c2d23a7d8d600e6a15377e7470477ef4eff9f780369dea8ccf",
       "spec_refs": [
         "arkret-spec/spec/v1/artifacts/schemas/event-envelope.schema.json",
         "arkret-spec/spec/v1/zh/extensions/realm-actors.md",
@@ -55,7 +55,10 @@
         "cotest/scripts/run-joint-e2e.ps1",
         "arkret-work/reports/2026-10-21-cross-project-protocol-audit-joint-full.md",
         "cotest/api-only-migration.json",
-        "cotest/scripts/run-api-only-native-migrations.py"
+        "cotest/scripts/run-api-only-native-migrations.py",
+        "cotest/e2e/helpers/coland-api.ts",
+        "cotest/e2e/tests/identity/oidc-login-flow.spec.ts",
+        "cotest/e2e/tests/identity/consent-grant.spec.ts"
       ],
       "tests": [
         {
@@ -100,7 +103,9 @@
       ],
       "remaining_scenarios": [
         "按现行规范检查生产消费者、fixture、mock 与拒绝路径；移除退役正例，确认合法分支、原件来源和持久效果。同步生成物并在受影响的 native／WASM 目标复验。",
-        "对照旧 11／13 与现行具名入口并记录变化依据，保留原选择记录与适用覆盖下限。无筛选 joint／release 须实际强制执行全部现行入口且零空选／跳过；三站结果复用 1127，最终跨仓发布组合归 0900。"
+        "对照旧 11／13 与现行具名入口并记录变化依据，保留原选择记录与适用覆盖下限。无筛选 joint／release 须实际强制执行全部现行入口且零空选／跳过；三站结果与最终跨仓发布组合复用[第五阶段](../impl-tailin/05-release-and-deployment.md#joint)。",
+        "将 Cotest 的 signedEventEnvelope、批量返回值、更新签名和直接修改 payload 的调用点接入生成类型。按现行 schema 对账订阅帧／设备消息的两份旧 Inkson fixture；合法往返及错误 kind／字段均走正式解码。[现行签名辅助](../../../cotest/e2e/helpers/coland-api.ts)",
+        "按现行测试名逐项核回访登录原七组、account-data 正例、跨站 Contact 配额、邀请接收的设备 fixture 及 Consent F18 的时钟证据。核 F18 的原签窗口、接纳及首次读取时刻和有效权限变化；保留到期后的原许可记录。只补实际缺少的执行入口。对账第十五轮 SDK 生成门首次失败，记录涉及的来源与修正，供第一至三阶段复验。"
       ]
     },
     {
@@ -137,317 +142,31 @@
       ]
     },
     {
-      "task": "2026-09-10-0540-client-current-result-durable-index.md",
-      "criteria_count": 4,
-      "criteria_sha256": "d9ec77d8d1a709366a0f6c6b6a6861892a93c29b7e33b64ba9171801df1e921a",
+      "task": "2026-09-14-0600-trusted-public-push-gateway-registration-handoff.md",
+      "criteria_count": 2,
+      "criteria_sha256": "c5b594d252a1c1464f28d4d84cf1326cd26c0930188384d2795cc79eeffc4c94",
       "spec_refs": [
-        "arkret-spec/spec/v1/zh/sync/current-state.md",
-        "arkret-spec/spec/v1/zh/sync/privacy-preserving-search.md",
-        "arkret-spec/spec/v1/zh/crypto-media/device-lifecycle.md",
-        "arkret-spec/spec/v1/zh/models/strand-and-message.md",
-        "arkret-spec/spec/v1/zh/models/event-and-patch.md",
-        "arkret-spec/spec/v1/artifacts/registry/current-state-registry.json",
-        "arkret-spec/spec/v1/artifacts/schemas/current-state.schema.json",
-        "arkret-spec/spec/v1/zh/discovery/client-preferences.md",
-        "arkret-spec/spec/v1/zh/governance/content-moderation.md",
-        "arkret-spec/spec/v1/zh/sync/service-http-binding.md",
-        "arkret-spec/spec/v1/zh/governance/history-visibility.md",
-        "arkret-spec/spec/v1/zh/governance/scope-settings.md",
-        "arkret-spec/spec/v1/zh/models/governance-objects.md"
+        "arkret-spec/spec/v1/zh/discovery/push-notifications.md"
       ],
       "source_refs": [
-        "inkson/src/state/current_index/search.rs",
-        "inkson/src/realm_events_engine.rs",
-        "garth/src/current_ingest.rs",
-        "inkson/src/views/global_search.rs",
-        "inkson/src/realm_events_engine/own_live.rs",
-        "coland/crates/storage-postgres/src/issued_realm_snapshots.rs",
-        "garth/src/history_recovery.rs",
-        "garth/src/own_station_results.rs",
-        "inkson/src/sync_engine.rs",
-        "inkson/src/state/current_index.rs",
-        "inkson/src/account_data/blocklist.rs",
-        "arkret-rust-sdk/crates/policy/src/signal_authorization.rs",
-        "inkson/src/views/global_search/session_tests.rs"
+        "coland/crates/http/src/routing/interop/push.rs",
+        "floria/src/service/tests/basics.rs",
+        "cotest/crates/push-registration-handoff-runner/src/lib.rs"
       ],
       "tests": [
         {
-          "path": "arkret-rust-sdk/crates/policy/src/signal_authorization.rs",
-          "symbol": "retention_policy_uses_exact_product_read_rules_and_its_own_validity_window",
-          "kind": "product",
-          "covers": "共享SDK求值器：retention精确读取规则、deny、有效期、其它action与未知条件，不提供消息TTL或基础授权"
-        },
-        {
-          "path": "inkson/src/state/current_index/search.rs",
-          "symbol": "search_retention_policy_and_validity_boundaries_use_the_same_durable_cut",
-          "kind": "product",
-          "covers": "SQLite共用签名Policy输入：十种规则／floor场景及有效期精确边界，冷读正文与下一重查时间，不推进current cut"
-        },
-        {
-          "path": "inkson/tests/wasm_current_index.rs",
-          "symbol": "search_retention_policy_and_validity_boundaries_survive_restart",
-          "kind": "product",
-          "covers": "真实浏览器IndexedDB复用相同签名Policy／Event／Commit与时间检查，逐点冷开核正文和重查时间"
-        },
-        {
-          "path": "inkson/src/views/global_search/session_tests.rs",
-          "symbol": "native_search_policy_window_withdraws_and_restores_without_a_new_cut",
-          "kind": "product",
-          "covers": "正式native hook：access／moderation／retention在无新cut时按Policy生效与到期撤下／恢复原Event及Commit"
-        },
-        {
-          "path": "inkson/src/views/global_search/session_tests.rs",
-          "symbol": "native_search_policy_replacement_cancels_the_old_boundary_and_cold_read_rechecks",
-          "kind": "product",
-          "covers": "正式native hook：替换Policy取消旧边界，按新边界撤下，冷读仍核当前策略"
-        },
-        {
-          "path": "inkson/tests/e2e/inkson.search-policy-window.spec.ts",
-          "symbol": "current retention Policy withdraws and restores the same search body at its validity boundaries",
-          "kind": "product",
-          "covers": "正式浏览器搜索：普通Account签名后继cut、异Strand新来源正控、Policy生效撤下／到期恢复／重载同Event与Commit，零搜索远端与写入"
-        },
-        {
-          "path": "inkson/src/realm_events_engine.rs",
-          "symbol": "signed_floor_snapshot_installs_message_revise_and_redaction",
-          "kind": "product",
-          "covers": "正式共享signed-floor产品验证：独立Event裁剪与Message终态均接纳闭合且精确subject的断言；错Event target、错payload、其它未支持对象及开放／空／外来值仍拒绝"
-        },
-        {
-          "path": "inkson/tests/e2e/inkson.search-event-redaction.spec.ts",
-          "symbol": "current Event cropping withdraws a visible search body and survives reload",
-          "kind": "product",
-          "covers": "正式浏览器搜索UI：签名Full命中、后继签名Event裁剪current撤下已显示正文、重查及重载保持拒绝、零远程search／Event／join写入；不是实际Station准入"
-        },
-        {
-          "path": "inkson/src/state/current_index/search.rs",
-          "symbol": "search_event_redaction_never_releases_cached_full_or_creates_a_message_tombstone",
-          "kind": "product",
-          "covers": "SQLite: Event字段裁剪的current-only、先裁剪后原件、create与revision、preserve元数据、放弃安装、Full重放与缺断言旧cut／冷恢复拒绝；不制造Message终态，不代替完整UI或真实Station验收"
-        },
-        {
-          "path": "inkson/tests/wasm_current_index.rs",
-          "symbol": "search_event_redaction_never_releases_cached_full_across_restart",
-          "kind": "product",
-          "covers": "真实IndexedDB与SQLite共用七组签名Event裁剪输入，五步及每步冷重开；不计完整浏览器搜索UI或真实Station来源"
-        },
-        {
-          "path": "inkson/src/views/global_search/session_tests.rs",
-          "symbol": "native_search_event_crop_withdraws_visible_body_and_full_replay_cannot_restore_it",
-          "kind": "product",
-          "covers": "正式native搜索hook：已显示正文随Event当前裁剪撤下，账号冷重开与Full重放不能恢复原正文"
-        },
-        {
-          "path": "inkson/tests/e2e/inkson.strands.search-locale.spec.ts",
-          "symbol": "global search results preserve local text and routes across language changes",
-          "kind": "product",
-          "covers": "正式签名消息搜索body／route／exact Event／Commit、En→Zh→En及页面重载恢复，零远程search／Event／join写入；实际执行状态见0540报告"
-        },
-        {
-          "path": "cotest/tests/client_account_stream.rs",
-          "symbol": "client_account_stream_vector_runs_clean",
-          "kind": "contract",
-          "covers": "Account stream合同向量，非宿主容量"
-        },
-        {
-          "path": "inkson/src/state/current_index/search.rs",
-          "symbol": "search_current_index_requires_publication_and_survives_reopen",
-          "kind": "product",
-          "covers": "native encrypted index: abandoned generation invisible, committed original byte-exact, cold reopen and wrong-Station rejection; not a complete native session query"
-        },
-        {
-          "path": "inkson/src/state/current_index/search.rs",
-          "symbol": "search_current_index_revocation_floor_and_withheld_suppress_originals",
-          "kind": "product",
-          "covers": "native complete-cut membership leave, history floor, withheld, wrong scope and missing Strand fail closed"
-        },
-        {
-          "path": "inkson/src/state/current_index/search.rs",
-          "symbol": "search_current_index_uses_latest_committed_revision_and_redaction",
-          "kind": "product",
-          "covers": "native latest accepted revision and redaction; tampered latest must not fall back to an old body"
-        },
-        {
-          "path": "inkson/src/state/projection_read_tests.rs",
-          "symbol": "search_privacy_and_session_reads_do_not_copy_unrelated_history",
-          "kind": "engineering",
-          "covers": "privacy/session narrow reads make zero full-account copies with 10000 unrelated audit rows"
-        },
-        {
-          "path": "cotest/crates/inkson-client-tests/tests/client_sync_production_live.rs",
-          "symbol": "sidecar_checkpoint_cases_use_the_actual_account_driver",
+          "path": "cotest/crates/push-registration-handoff-runner/src/lib.rs",
+          "symbol": "executes_real_lifecycle",
           "kind": "live",
-          "covers": "真实Station Sidecar非空依赖与tail、exact GET withheld／503拒绝时root／cursor／current不变，实际SQLite事务失败／旧cut恢复、新进程读回与23个canonical Sync case；不证明真实容量或完整native/browser搜索会话矩阵"
-        },
-        {
-          "path": "inkson/src/views/global_search/session_tests.rs",
-          "symbol": "native_search_visible_results_expire_at_each_holder_deadline",
-          "kind": "product",
-          "covers": "Formal native search hook and encrypted committed index: exact original Event/Commit/body, independent session/projection/authorization half-open expiry, visible rows removed without store/query changes"
-        },
-        {
-          "path": "inkson/src/views/global_search/session_tests.rs",
-          "symbol": "native_search_renewed_holder_cancels_old_expiry_and_rechecks_new_expiry",
-          "kind": "product",
-          "covers": "Formal search holder renewal cancels old timer and removes results at the replacement expiry"
-        },
-        {
-          "path": "inkson/src/views/global_search/session_tests.rs",
-          "symbol": "native_search_holder_replacement_revocation_and_late_request_fail_closed",
-          "kind": "product",
-          "covers": "Formal native asynchronous query versus account/Device/grant/revocation/session epoch replacement; pending completion cannot restore plaintext"
-        },
-        {
-          "path": "inkson/tests/e2e/inkson.search-session-expiry.spec.ts",
-          "symbol": "visible committed search plaintext disappears without another query",
-          "kind": "product",
-          "covers": "Browser product search from signed API fixtures: independent session/projection/authorization expiry removes committed plaintext and expired retry stays empty, zero remote search/Event/join writes; not live Coauth or full same-source holder matrix"
-        },
-        {
-          "path": "inkson/src/views/global_search/session_tests.rs",
-          "symbol": "native_search_new_query_becomes_readable_after_not_before_without_store_change",
-          "kind": "product",
-          "covers": "Formal native query starts before not_before, later accepts the same persisted evidence and arms expiry; the displayed result disappears again when that authorization window ends"
-        },
-        {
-          "path": "inkson/tests/e2e/inkson.search-session-expiry.spec.ts",
-          "symbol": "new query accepts effective holder evidence without remounting the panel",
-          "kind": "product",
-          "covers": "Browser positive/negative same-panel holder-time transition: no result before device evidence is effective, then exact body/Event/Commit on a new authorized query; zero remote search/Event/join writes"
-        },
-        {
-          "path": "inkson/src/state/current_index/search.rs",
-          "symbol": "search_requires_active_strand_and_current_realm_evidence",
-          "kind": "product",
-          "covers": "native encrypted SQLite: shared signed originals/cuts; active Strand with matching Realm evidence remains readable; archived or missing records suppress results and inconsistent signed sources fail live and after reopen; bounded production candidate filter, not full UI or live Station admission"
-        },
-        {
-          "path": "inkson/tests/wasm_current_index.rs",
-          "symbol": "search_requires_active_strand_and_current_realm_evidence",
-          "kind": "product",
-          "covers": "browser IndexedDB: shared signed originals/cuts; active Strand with matching Realm evidence remains readable; archived or missing records suppress results and inconsistent signed sources fail live and after reopen; bounded production candidate filter, not full UI or live Station admission"
-        },
-        {
-          "path": "inkson/src/state/current_index/search.rs",
-          "symbol": "search_current_message_redaction_is_terminal_without_history_and_scrubs_candidates",
-          "kind": "product",
-          "covers": "Encrypted SQLite: current-only Message redaction, redaction before original, latest revision, unrelated target isolation, abandoned stage, late replay, disclosure changes and cold reopen; latest candidate contains no retained original; fixture input after verification, not live Station admission"
-        },
-        {
-          "path": "inkson/src/state/current_index/search.rs",
-          "symbol": "search_current_message_redaction_rejects_bad_evidence_without_publication",
-          "kind": "product",
-          "covers": "Encrypted SQLite: empty assertions, wrong subject and wrong stream reject installation with old generation and previously authorized result unchanged"
-        },
-        {
-          "path": "inkson/src/state/current_index/search.rs",
-          "symbol": "search_current_redaction_masks_unfolded_legacy_candidates",
-          "kind": "product",
-          "covers": "Current-cut read gate hides an original cached by the previous installer even without a physical candidate rewrite"
-        },
-        {
-          "path": "inkson/src/views/global_search/session_tests.rs",
-          "symbol": "native_search_current_only_redaction_removes_visible_body_and_retry_stays_empty",
-          "kind": "product",
-          "covers": "Formal native use_local_search hook: exact original initially visible, committed current-only redaction removes result and explicit retry remains empty without an error"
-        },
-        {
-          "path": "inkson/tests/wasm_current_index.rs",
-          "symbol": "search_current_message_redaction_is_terminal_without_history_and_scrubs_candidates",
-          "kind": "product",
-          "covers": "Real browser IndexedDB: same signed current-only, before-original, revised and unrelated-target fixtures, late replay, latest candidate scrub, disclosure change and cold reopen; bounded production filter, not full browser UI"
-        },
-        {
-          "path": "inkson/tests/wasm_current_index.rs",
-          "symbol": "search_current_message_redaction_rejects_bad_evidence_without_publication",
-          "kind": "product",
-          "covers": "Real browser IndexedDB: same empty/wrong-subject/wrong-stream cuts fail without replacing the old authorized result"
-        },
-        {
-          "path": "inkson/src/state/current_index/search.rs",
-          "symbol": "search_revision_current_advance_waits_for_exact_original_across_restart",
-          "kind": "product",
-          "covers": "Encrypted SQLite: published create, abandoned current stage, current-only revision advance suppresses stale body, old-original replay, cold reopen, exact signed revision backfill and recovered current body"
-        },
-        {
-          "path": "inkson/src/state/current_index/search.rs",
-          "symbol": "search_revision_current_requires_exact_carrier_evidence",
-          "kind": "product",
-          "covers": "Encrypted SQLite: same signed create/revise fixtures with missing current, wrong stream/Commit/position/payload/Message selector and older current; invalid installation or bounded read releases no body"
-        },
-        {
-          "path": "inkson/tests/wasm_current_index.rs",
-          "symbol": "search_revision_current_advance_waits_for_exact_original_across_restart",
-          "kind": "product",
-          "covers": "Real browser IndexedDB: same signed current-first fixture, no old-body fallback after replay/restart, exact original backfill restores current body and survives cold reopen; production index filter, not full UI"
-        },
-        {
-          "path": "inkson/tests/wasm_current_index.rs",
-          "symbol": "search_revision_current_requires_exact_carrier_evidence",
-          "kind": "product",
-          "covers": "Real browser IndexedDB: same create/revise carrier evidence matrix as SQLite; rejected installation or current-cut mismatch never releases plaintext"
-        },
-        {
-          "path": "inkson/src/views/global_search/session_tests.rs",
-          "symbol": "native_search_current_revision_hides_stale_body_and_recovers_exact_original",
-          "kind": "product",
-          "covers": "Formal native use_local_search hook: visible create disappears after current-only revision, retry stays empty, verified original arrival restores replacement body with exact source Event and covering Commit"
-        },
-        {
-          "path": "inkson/src/bin/inkson-wire/realm_fixture.rs",
-          "symbol": "message_fixture_delivers_exact_current_revision_carrier",
-          "kind": "product",
-          "covers": "Existing browser wire fixture generator delivers the signed Message create carrier as message_revision current with exact source stream, Commit/position and payload; fixture validation, not live admission"
-        },
-        {
-          "path": "inkson/src/views/global_search/session_tests.rs",
-          "symbol": "native_search_local_block_withdraws_visible_body_and_unblock_restores_retained_original",
-          "kind": "product",
-          "covers": "Formal native search hook: local pending messages block changes neither accepted blocklist revision nor current generation, withdraws visible body; retry/cold encrypted account reload stay empty; unblock automatically restores exact retained Event/Commit/body"
-        },
-        {
-          "path": "inkson/src/views/global_search/session_tests.rs",
-          "symbol": "native_search_blocklist_uses_exact_actor_mode_surface_and_expiry",
-          "kind": "product",
-          "covers": "Formal native search hook: block/hide suppress, mute remains searchable, another surface/expired rule/same principal at another Station remain visible; shared existing typed blocklist evaluator"
-        },
-        {
-          "path": "inkson/src/views/global_search/session_tests.rs",
-          "symbol": "native_search_pending_request_cannot_republish_a_newly_blocked_sender",
-          "kind": "product",
-          "covers": "Formal native callback starts a request before local block is applied; rendering/effects and late query completion cannot republish the sender body"
-        },
-        {
-          "path": "inkson/tests/e2e/inkson.search-blocklist.spec.ts",
-          "symbol": "global search applies personal message blocks and restores retained history after unblock",
-          "kind": "product",
-          "covers": "Real Chromium product UI: ordinary verified Realm history, Settings message-only Actor block, search hides body, reload remains filtered, Settings unblock restores same signed Event/Commit/body; mocked Station fixtures, not live Coauth/Station or other blocklist targets"
-        },
-        {
-          "path": "inkson/src/state/current_index/search.rs",
-          "symbol": "search_disclosure_backfill_recovers_exact_original_without_reopening_other_gates",
-          "kind": "product",
-          "covers": "Encrypted SQLite bounded production search: same signed disclosure cases as IndexedDB, create/withheld-first/revised-create/revision, exact Event backfill, current-only and unrelated originals remain hidden, both mixed-disclosure orders fail closed, repeated Full, re-withholding, tightened history floor and terminal Message redaction; every step checked after cold reopen"
-        },
-        {
-          "path": "inkson/tests/wasm_current_index.rs",
-          "symbol": "search_disclosure_backfill_recovers_exact_original_without_reopening_other_gates",
-          "kind": "product",
-          "covers": "Real browser IndexedDB bounded production search: identical signed inputs and all observations as SQLite, each committed step and cold reopen; fixture host at verified-input boundary, not full browser UI or live Station admission"
-        },
-        {
-          "path": "inkson/src/views/global_search/session_tests.rs",
-          "symbol": "native_search_disclosure_withdraws_and_recovers_only_after_durable_full_publication",
-          "kind": "product",
-          "covers": "Formal native use_local_search hook: visible original disappears on withheld, abandoned Full cannot republish, encrypted account cold recovery and committed Full restore exact Event/Commit/body, later withheld removes it again"
+          "covers": "Opt-in PostgreSQL handoff lifecycle; exercise route separation on the production registration path and verify TLS separately."
         }
       ],
-      "engineering_checks": [],
+      "engineering_checks": [
+        "Compare the private target for the same registered route and separate real gateways on one authenticated device within an epoch."
+      ],
       "remaining_scenarios": [
-        "补齐正式搜索入口当前读取授权的同来源native／browser负例矩阵：缺当前cut、错误Event／Commit／actor／scope／Strand、错账号设备、撤权均不释放正文。Account／独立stream候选已实现，完整入口矩阵仍须对照。",
-        "完整搜索负例与生命周期矩阵：history收紧、适用retention的披露撤下／恢复、缺密钥／未验证crypto，以及借公共Strand定位私密Sidecar和修订链的完整浏览器展示；Message当前撤回终态、最新revision的同cut签名carrier绑定／补齐恢复及合法Policy求值／时间窗已实现。现行scope-settings §4.3未定义通用消息TTL，Policy.expires_at是策略有效期，不能据此发明消息expiry字段或期限求解器。",
-        "补齐完整holder／Device／session搜索授权入口的同来源native／browser正负矩阵，尤其浏览器异步晚到、会话／Device replacement及完整holder授权证据链；原生正式hook已完成的到期／续期／替换晚到不重复列为待实现，但不代替全入口对照。",
-        "1／100／1000 Realm真实服务端与实机首屏、UI长任务指标；类型编译、索引微基准与全库library通过均不是该容量验收。"
+        "按 §2.2 将完整认证 AccountId、真实设备、实际 Gateway／通道及内部 epoch 绑定到既有私有派生过程。保留同元组与窗口的确定性，分别验证换 Gateway、换通道、换账号／设备或 epoch 的对照。Describe 及扩展保持既定披露边界。",
+        "使注册、替换、终局撤销与冷恢复使用同一登记路由。核 active token、high-water、原签 receipt 精确重放及按窗口清理旧映射。实施后把真实 TLS、部分 fanout 与进程重启交给[第三阶段](../impl-tailin/03-federation-and-recovery.md#authority)。"
       ]
     },
     {
@@ -639,45 +358,6 @@
       ]
     },
     {
-      "task": "2026-09-26-1121-space-and-kanban-admission.md",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/models/space-hierarchy.md",
-        "arkret-spec/spec/v1/zh/models/strand-and-message.md"
-      ],
-      "source_refs": [
-        "inkson/src/state/projection/kanban_ops.rs",
-        "coland/crates/storage-postgres/tests/space_create_current_states.rs",
-        "inkson/src/outbound_store/card_placement.rs",
-        "inkson/src/event_submit/card_placement.rs",
-        "cotest/e2e/tests/kanban/cross-member-encrypted.spec.ts"
-      ],
-      "tests": [
-        {
-          "path": "coland/crates/storage-postgres/tests/space_create_current_states.rs",
-          "symbol": "space_create_root_and_child_have_metadata_and_parent_and_exact_replay",
-          "kind": "live",
-          "covers": "PostgreSQL Space creation, signed metadata and parent state, and exact replay. Browser placement, restart and revocation have separate product scenarios."
-        },
-        {
-          "path": "inkson/src/event_submit/card_placement.rs",
-          "symbol": "card_receipt_and_cold_restart_keep_one_exact_followup_through_response_loss",
-          "kind": "contract",
-          "covers": "Cold queue reopening and exact follow-up after a lost response."
-        }
-      ],
-      "engineering_checks": [],
-      "criteria_count": 6,
-      "criteria_sha256": "f3ba1ded2694a765036445ed0fde5ecf0c82a88dbf4d714448ca70920c903371",
-      "remaining_scenarios": [
-        "用现有队列和后台续接，在离线、建卡或移动回执丢失、进程冷重启及被拒时验证精确重试。原卡只建一次，位置恢复，终局与实际接纳一致。",
-        "真实 Station 重启后的看板恢复与双方内容可见验证，不能以浏览器刷新或其它领域重启用例替代。",
-        "真实 leave／revoke 后的看板 UI 权限失效验证，不能以 mock403、PG leave 或原生 terminal 测试替代。",
-        "**KB-NET-01 本地重投影与精准补数。** 已安装完整目标current/所需已验证历史时，普通消息、无关Realm current generation或无关scope MLS更新只触发必要本地重投影，新增Space/Strand list与起点backfill请求均为0；确有对象/历史覆盖缺口时只获取缺少的正式分页/尾部。Realm至少501条历史且最新卡片/变更在第一页之后仍正确显示，不以反复起点500条或无界全历史重扫作为恢复。覆盖首次载入、since-join保留对象、晚到MLS解锁、current-only变化、archive/redaction、权限收紧；历史覆盖和current完整性分别证明。",
-        "**KB-NET-02 单轮读取与晚到隔离。** 首次加载与live刷新共享等价读取；同Realm/scope/session至多1个进行中的同类读取，新key在途时合并为一次确需的后续刷新，不能丢最后变化。Space和Strand等独立取材可有界并发，单列表分页继续遵守完整generation/cursor；结果绑定完整账户/Station、页面目标、会话代数与实际覆盖，旧请求晚到不得覆盖新current、退群终态或新看板。用户快速切换、失败/取消及一个waiter退出有定向计数和状态断言。",
-        "KB-NET-03 在真实浏览器和 Station 比较 WebSocket 优先与 HTTP 降级。记录首次、稳态、缺口和故障时的请求、行数、字节与交互；重复 20 次无变化提示不重复整组读取，20 次变化不并行发起 20 套读取，且仍能发现最后一次变化。"
-      ]
-    },
-    {
       "task": "2026-10-15-2312-content-delivery-phase-boundaries.md",
       "criteria_count": 5,
       "criteria_sha256": "a5f8516d8d0f7e055d9c1515fea846b055f022c2dd0ca81ccea19db451e5d152",
@@ -801,7 +481,7 @@
     {
       "task": "2026-10-22-2129-local-ci-repair.md",
       "criteria_count": 3,
-      "criteria_sha256": "173132d9a7a8d55ed33f41cf959e0ff8fbbe8056eba0e364196c16cf65b9022e",
+      "criteria_sha256": "01dd4710b84b196a543a69c58a80ccac3f2c7a74e859ee8e3675a5ecb2673659",
       "spec_refs": [],
       "source_refs": [
         "coland/Cargo.toml",
@@ -817,84 +497,8 @@
       ],
       "remaining_scenarios": [
         "在当前源复验备份解锁与资料页的具名失败并归因；修正有问题的产品或夹具。用正式 just test-wasm 入口验证两个目标、渲染特性、runner 与浏览器结果。",
-        "逐仓以当前 main 的首个有效失败诊断 CI、Coland 的 Docker／HTTP 及 Cotest 原生、文档与集成分片。保留现行工作流的分片、真实 10000 历史、MLS、SLO 与来源要求；逐项对照旧 235／31／8 分片记录。0328 的历史 CI 对账在此复用。",
+        "逐仓以当前 main 的首个有效失败诊断 CI、Coland 的 Docker／HTTP 及 Cotest 原生、文档与集成分片。保留现行工作流的分片、真实 10000 历史、MLS、SLO 与来源要求；逐项对照旧 235／31／8 分片记录。0328 的历史 CI 对账在此复用。第十四轮单站 60 个业务失败中，45 个停在已修看板定位器；针对其余失败逐个对照首个错误（勿扰、联系人侧栏、加密附件、跨站会话、Agent 授权等），复现后修正或交回对应生产任务。[运行记录](../../reports/2026-11-27-circle-removal-and-protocol-simplification.md)",
         "账单／支出限制修复后复验受影响的协调仓工作流。Coauth 的真实 OIDC/FAPI 证据继续区分 PAR、授权响应 iss、OAuth DPoP 和五项人工 REVIEW。已明确延期的 mTLS、31 项原生证明及保留的 admin／RFD 红项按原裁决记录。"
-      ]
-    },
-    {
-      "task": "2026-10-28-0602-realm-invite-links-and-ivs-withdrawal.md",
-      "criteria_count": 3,
-      "criteria_sha256": "67b83a6132356e79f57ba9e918cac29267d33910391446375860a710d2b5c930",
-      "spec_refs": [],
-      "source_refs": [
-        "arkret-work/tasks/impl-active/2026-10-28-0602-realm-invite-links-and-ivs-withdrawal.md",
-        "cotest/scripts/check_realm_invite_links.py",
-        "cotest/tests/realm_invite_link_contracts.rs",
-        "coland/crates/storage-postgres/src/realm_invite_links.rs",
-        "cotest/e2e/tests/joint/realm-invite-link-sync.spec.ts"
-      ],
-      "tests": [
-        {
-          "path": "cotest/tests/realm_invite_link_contracts.rs",
-          "symbol": "realm_invite_links_retain_real_acceptance_and_atomic_usage",
-          "kind": "live",
-          "covers": "Real accepted invite-link/atomic-usage entrypoint; full remaining cross-station/browser matrix stays pending."
-        }
-      ],
-      "engineering_checks": [
-        "Compare accepted membership and use counts before and after a last-use race, revocation, lost response and retry."
-      ],
-      "remaining_scenarios": [
-        "用正式签发与已接纳原件覆盖同站、跨站、最后名额并发、接受与撤销竞争、过期、封禁、关闭、退出后重用及权限变化。失败保持零共享写，丢回执精确重试只保留一份接纳。",
-        "验证全局落地页、登录前后选账号、生成与管理、相同主体在不同站点、重启和合法交接。按实际受测版本记录客户端与 SDK 锁定来源。",
-        "复验普通定向邀请、PrincipalLocator、注册和找回邮件及第三方邀请验证服务撤销；在最终版本完成生成物一致性、命名、未知字段和服务隔离检查。"
-      ]
-    },
-    {
-      "task": "2026-10-29-0328-collaboration-pr-review-and-followups.md",
-      "criteria_count": 2,
-      "criteria_sha256": "86d8d9045a7a00ed99a91241342199f2abf21228d9e0d4123934a0ec4737576b",
-      "spec_refs": [],
-      "source_refs": [
-        "arkret-work/tasks/impl-active/2026-10-29-0328-collaboration-pr-review-and-followups.md",
-        "cotest/.github/workflows/ci.yml",
-        "cotest/scripts/run-joint-e2e.ps1",
-        "cotest/e2e/tests/workflows/community-event.spec.ts"
-      ],
-      "tests": [
-        {
-          "path": "cotest/e2e/tests/workflows/community-event.spec.ts",
-          "symbol": "three browser-owned members deliver a community event through encrypted discussion, assigned cards and an attachment @community-event-gate",
-          "kind": "product",
-          "covers": "Three separate browser accounts, encrypted discussion, assigned cards and attachment."
-        }
-      ],
-      "engineering_checks": [
-        "Map the multi-account community workflow to current product actions, retaining separate evidence for calendar, contacts, cold reads and targeted collaboration fixes."
-      ],
-      "remaining_scenarios": [
-        "核社区活动实际注册、直接邀请和链接、成员能力、讨论、看板、附件、日程地点、退出及冷恢复。将已有用例与具名实跑对应，补缺少的用户步骤；核 Contact 和长用户名的实际回归。",
-        "对仍复现的问题留操作、实际账户角色、版本和原生接纳结果，修复后用相同旅程验证，更新 Cotest 覆盖和证据。旧 Coland #21/#22、Cotest #10 的结算引用当前 CI 来源及既有暂停裁决。"
-      ]
-    },
-    {
-      "task": "2026-11-02-1127-joint-full-failure-remediation.md",
-      "criteria_count": 3,
-      "criteria_sha256": "a37e86636fccf958fd224ea890bedd4ba11c2fc504ba1765d5447adca405d6e7",
-      "spec_refs": [],
-      "source_refs": [
-        "arkret-work/tasks/impl-active/2026-11-02-1127-joint-full-failure-remediation.md",
-        "cotest/scripts/run-joint-e2e.ps1",
-        "cotest/e2e/helpers/kanban-product-ui.ts"
-      ],
-      "tests": [],
-      "engineering_checks": [
-        "Bind the repaired board journey and the full unfiltered three-Station run to actual service and client builds, scenario counts and failures."
-      ],
-      "remaining_scenarios": [
-        "在与最新前端相符的受测构建上，从设置菜单真正建成看板，记录第十四轮旧定位器对应的浏览器结果。",
-        "冻结变更后的服务、前端、Agent 和测试源，运行原无筛选三站 joint-full 至自然终态。核真实服务配置、全部现行原生与浏览器场景、零空选／跳过、来源稳定及敏感数据扫描；记录成功、失败、未运行。",
-        "将仍能复现的失败定位到首次出错步骤与对应领域，修复后做具名正反回归并回到同源全量。恢复、Direct、项目 Agent 既有义务逐项对应实际执行；1156 的新增功能在其交付后纳入。"
       ]
     },
     {
@@ -948,7 +552,7 @@
     {
       "task": "2026-11-14-2133-protocol-rationality-production-sync.md",
       "criteria_count": 6,
-      "criteria_sha256": "c73736903f0610104b436db8bb34f16c36336f44d79972d74614b662e32b2a8e",
+      "criteria_sha256": "79fcd46532399ff232763d9880b30437676de279e038451021f91ac202d10df0",
       "spec_refs": [],
       "source_refs": [
         "arkret-work/tasks/impl-active/2026-11-14-2133-protocol-rationality-production-sync.md",
@@ -1038,7 +642,7 @@
         "G03／2032 用真实产品录制入口验证媒体字节进入已登记 STREAM 编码、获准方可读以及停止／撤权后的写入限制。G04 在主时间线验证已证身份提及和缺来源的降级展示，绑定账号保持准确。",
         "按下方八组具名验收条件对照实际消费者、已有运行和缺失证据。覆盖并发、拒绝、崩溃恢复与权限变化；2045-M09 已有本次规模实测。逐组结算当前组合的剩项。",
         "核对独立 Coland／Coauth 及数据库部署，完成作者、读取端、SDK、浏览器／WASM 的受影响验证。按原范围分别核对实际恢复、擦除、组织与合资格交接及原生组合；冻结或须另行安排的范围保持原裁决。",
-        "最终版本固定各仓提交、兼容组合与正式构建。复用 1127 的无筛选联合结果及 0900 的相应发布验收，记录未执行项与来源。"
+        "最终版本固定各仓提交、兼容组合与正式构建。复用[第五阶段](../impl-tailin/05-release-and-deployment.md)的无筛选联合结果及相应发布验收，记录未执行项与来源。"
       ]
     },
     {
