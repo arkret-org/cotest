@@ -108,9 +108,9 @@ export async function addBoardList(page: Page, title: string): Promise<Locator> 
     .test(decodeURIComponent(url.pathname)), { timeout: 120_000 });
   const [, , realmId, , boardId] = decodeURIComponent(new URL(page.url()).pathname).split("/");
   const composer = page.locator(".board-list-compose");
-  const disclosure = page.locator(".board-toolbar-add-list > .sapid-collapsible-trigger");
-  if (await disclosure.getAttribute("aria-expanded") !== "true") await disclosure.click();
-  const input = composer.locator(".new-column-input");
+  const trigger = page.locator(".board-toolbar-add-list .sapid-popover-trigger");
+  if (await trigger.getAttribute("aria-expanded") !== "true") await trigger.click();
+  const input = composer.getByRole("textbox");
   const submit = composer.locator(".add-column-button");
   await expect(composer).toBeVisible();
   await expect(submit).toBeEnabled({ timeout: 120_000 });
