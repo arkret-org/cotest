@@ -618,14 +618,17 @@ pub(super) async fn controller_message(
     let scope = state.event.scope_ref.clone();
     let content = arkret::ContentBlock::text("Endpoint-specific actual Sidecar content");
     let plaintext = arkret_canonical::canonical_json_bytes(&content)?;
-    let mut event = controller
-        .client
-        .author_event(
-            scope.realm_id().as_str(),
-            "ak.message.create",
-            json!({"strand_id":strand,"track_name":"discussion","content":content}),
-        )
-        .await?;
+    // A private message uses the controller's Device and enrolled Sidecar
+    // leaf. It carries no authority-root reference from the housing PCR.
+    let mut event = crate::harness::event_envelope_with_signing_identity(
+        &controller.client.actor,
+        scope.realm_id().as_str(),
+        "ak.message.create",
+        json!({"strand_id":strand,"track_name":"discussion","content":content}),
+        controller.key.to_bytes(),
+        &controller.method,
+        Some(&controller.account.station_id),
+    );
     event.scope_ref = scope;
     crate::harness::refresh_typed_event_proof_with_signing_seed(
         &mut event,
@@ -1955,6 +1958,12 @@ async fn run_sidecar_production(case: SidecarCase) -> Result<()> {
         .await?;
         ensure_commit_signed_by(&commit, &remote.station)?;
         let expected = wait_for_committed(&remote.controller, &message.event_id).await?;
+        // H must hold the signed G head before it can verify a complete page.
+        // Replication is asynchronous even when both local services are healthy.
+        crate::scenarios::human_device_producer_live::ensure_same_commit(
+            &commit,
+            &wait_for_committed(client, &message.event_id).await?,
+        )?;
         // The immutable provision selects the mandatory service operations.
         // Issue a read-only content ceiling on the project while retaining those operations.
         let read_actions = actions

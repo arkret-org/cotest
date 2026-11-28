@@ -30,29 +30,36 @@ pub(super) async fn issue(
     TestActorClient,
     arkret_models_identity::SessionGrantMetadata,
 )> {
-    let (credential, _) = coauth_session_evidence::issue_runtime_session_with_scope(
-        &deployment.station,
-        deployment.coauth.base_url(),
-        &deployment.coauth.pg.connect_url,
-        &agent.agent_account.principal_id,
-        &agent.key_authorization,
-        &agent.verification_method,
-        &agent.runtime_key,
-        operations,
-        selectors(realm),
-    )
+    let (outcome, request) = crate::harness::heap_future(|| {
+        coauth_session_evidence::issue_runtime_session_outcome(
+            &deployment.station,
+            deployment.coauth.base_url(),
+            &deployment.coauth.pg.connect_url,
+            &agent.agent_account.principal_id,
+            &agent.key_authorization,
+            &agent.verification_method,
+            &agent.runtime_key,
+            operations,
+            selectors(realm),
+        )
+    })
     .await?;
     let claims = content_session_evidence::observed_issued_metadata(
         &deployment.coauth.pg.connect_url,
-        &credential,
+        outcome.session_grant.as_str(),
     )
     .await?;
-    let runtime = deployment.station.client_with_agent_runtime_grant(
-        agent.agent_did.as_str(),
-        "direct-content-runtime",
-        credential,
-        agent.runtime_key.clone(),
-    )?;
+    let runtime = crate::harness::heap_future(|| {
+        deployment.station.client_with_issued_agent_session(
+            agent.agent_did.as_str(),
+            RUNTIME_FRAGMENT,
+            agent.runtime_key.clone(),
+            deployment.coauth.base_url(),
+            request,
+            outcome,
+        )
+    })
+    .await?;
     Ok((runtime, claims))
 }
 
