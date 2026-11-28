@@ -86,7 +86,10 @@ async fn submit(controller: &TestActorClient, event: &Event) -> Result<arkret_wi
     }
 }
 
-async fn blob(controller: &TestActorClient, bytes: &[u8]) -> Result<arkret_wire::BlobRef> {
+pub(super) async fn blob(
+    controller: &TestActorClient,
+    bytes: &[u8],
+) -> Result<arkret_wire::BlobRef> {
     let value = expect_json(
         controller.post("/_arkret/self/blob/upload").multipart(
             crate::scenarios::delivery_media::blob_upload_form(bytes, "application/octet-stream")?,

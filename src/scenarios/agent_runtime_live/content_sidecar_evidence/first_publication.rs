@@ -233,7 +233,8 @@ pub(super) async fn join_and_publish(
     else {
         bail!("expected Sidecar genesis");
     };
-    let series = heap_future(|| select_agent_backup_series(&controller, &agent)).await?;
+    let subject = super::super::pcr_backup::Subject::from(&agent);
+    let series = heap_future(|| select_agent_backup_series(&controller, &subject)).await?;
     let own = agent
         .runtime
         .sdk()

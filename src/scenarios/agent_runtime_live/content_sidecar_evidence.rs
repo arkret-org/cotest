@@ -1696,9 +1696,9 @@ pub async fn run_agent_first_sidecar_publication() -> Result<()> {
     crate::harness::heap_future(|| run_sidecar_production(SidecarCase::AgentFirst)).await
 }
 
-async fn select_agent_backup_series(
+pub(super) async fn select_agent_backup_series(
     controller: &Member,
-    agent: &AgentRuntimeSession,
+    agent: &super::pcr_backup::Subject,
 ) -> Result<arkret::BackupSeriesId> {
     use arkret_models_collaboration::events_payloads::{
         ControllerBackupTrustAnchor, UnsignedKeyBackupActiveSeries,

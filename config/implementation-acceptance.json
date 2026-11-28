@@ -551,8 +551,8 @@
     },
     {
       "task": "2026-11-14-2133-protocol-rationality-production-sync.md",
-      "criteria_count": 6,
-      "criteria_sha256": "79fcd46532399ff232763d9880b30437676de279e038451021f91ac202d10df0",
+      "criteria_count": 5,
+      "criteria_sha256": "80aba6eb263df70809c84bea999c384ac88d40ee01a7eb0f25880b4ea63e7e47",
       "spec_refs": [],
       "source_refs": [
         "arkret-work/tasks/impl-active/2026-11-14-2133-protocol-rationality-production-sync.md",
@@ -575,7 +575,9 @@
         "coauth/crates/backend/src/handlers/arkret/session_grant/refresh.rs",
         "coland/crates/server/tests/recovery_atomic_unit.rs",
         "cotest/tests/recovery_transaction_faults.rs",
-        "cotest/tests/reaction_mls_http_live.rs"
+        "cotest/tests/reaction_mls_http_live.rs",
+        "coland/crates/storage-postgres/src/agent_root_backup.rs",
+        "coland/crates/storage-postgres/src/agent_root_backup/controller.rs"
       ],
       "tests": [
         {
@@ -615,6 +617,12 @@
           "covers": "2036 real client frozen continuation/durable checkpoint entry, no compile-to-runtime inference."
         },
         {
+          "path": "cotest/tests/agent_pcr_profile_live.rs",
+          "symbol": "issued_agent_can_upload_only_its_own_pcr_roots_until_key_revocation",
+          "kind": "live",
+          "covers": "1017 Agent PCR root upload using an issued native session, retained running-key proof and unchanged backup tables after refused writes."
+        },
+        {
           "path": "cotest/tests/agent_content_sidecar_live.rs",
           "symbol": "effective_agent_first_sidecar_message_survives_restart_loss_and_revocation",
           "kind": "live",
@@ -637,7 +645,6 @@
         "Verify Agent PCR §8.2 root publication using the bound Agent session. Verify self and peer recovery cleanup with the real prepared inventory from 1156."
       ],
       "remaining_scenarios": [
-        "1017 的 Agent PCR §8.2。用真实签发的 Agent 会话验证它自己的个人控制域根备份，并核对签名与运行身份绑定。",
         "0759 收尾。以 1156 的真实准备结果分别走 self 与 peer，验证独立 H/G 身份、正确来源成功、错误来源拒绝、超时后重试不重复使旧端失效；服务对外广告与可执行入口一致。",
         "G03／2032 用真实产品录制入口验证媒体字节进入已登记 STREAM 编码、获准方可读以及停止／撤权后的写入限制。G04 在主时间线验证已证身份提及和缺来源的降级展示，绑定账号保持准确。",
         "按下方八组具名验收条件对照实际消费者、已有运行和缺失证据。覆盖并发、拒绝、崩溃恢复与权限变化；2045-M09 已有本次规模实测。逐组结算当前组合的剩项。",

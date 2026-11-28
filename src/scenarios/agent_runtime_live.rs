@@ -85,7 +85,9 @@ mod lifecycle_evidence;
 mod longevity_conjunction;
 mod longevity_evidence;
 mod pairing_expiry_evidence;
+mod pcr_backup;
 mod pcr_evidence;
+pub use pcr_backup::run_agent_pcr_backup;
 mod presence_evidence;
 mod privacy_evidence;
 mod provision_conjunction;
@@ -389,7 +391,32 @@ impl AgentRuntimeSession {
         controller_account: &AccountId,
         label: &str,
         scope: AgentKeyScope,
+        evidence: Option<&mut provision_evidence::ProvisionEvidence>,
+    ) -> Result<AgentPairedPrincipal> {
+        crate::harness::heap_future(|| {
+            Self::establish_with_bootstrap(
+                server,
+                issuer,
+                controller,
+                controller_account,
+                label,
+                scope,
+                evidence,
+                None,
+            )
+        })
+        .await
+    }
+
+    async fn establish_with_bootstrap(
+        server: &ArkretServer,
+        issuer: &AgentSessionIssuer<'_>,
+        controller: &TestActorClient,
+        controller_account: &AccountId,
+        label: &str,
+        scope: AgentKeyScope,
         mut evidence: Option<&mut provision_evidence::ProvisionEvidence>,
+        bootstrap: Option<&mut Option<pcr_backup::InitialBackup>>,
     ) -> Result<AgentPairedPrincipal> {
         let principal = controller
             .principal
@@ -666,6 +693,29 @@ impl AgentRuntimeSession {
             "the live Station must mint an eight-digit decimal Agent pairing code"
         );
 
+        if let Some(output) = bootstrap {
+            let subject = pcr_backup::Subject {
+                agent_account: agent_account.clone(),
+                agent_pcr: agent_pcr.clone(),
+                delegation: delegation.clone(),
+                controller_account: controller_account.clone(),
+                history_custody: history_custody.clone(),
+                custody_authorization: provision_event.event_id.clone(),
+                history_recipient_public: approved_recipient(
+                    controller,
+                    controller_account,
+                    &history_custody,
+                )
+                .await?,
+            };
+            *output = Some(
+                crate::harness::heap_future(|| {
+                    pcr_backup::initial_backup(server, controller, &subject)
+                })
+                .await?,
+            );
+        }
+
         // 7. The runtime resolves its pairing handle and submits its key.
         let pairing_token = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&json!({
             "r": complete.pairing_request_id,
@@ -868,43 +918,8 @@ impl AgentRuntimeSession {
             .await?;
         }
 
-        let policy: arkret_models_crypto::RecoveryPolicyStatusView = serde_json::from_value(
-            expect_json(
-                controller.get("/_arkret/root/identity/recovery-policy"),
-                StatusCode::OK,
-            )
-            .await?,
-        )?;
-        let summary = policy
-            .active_policy
-            .context("approved controller policy absent")?;
-        ensure!(
-            controller_history_custody(controller_account, &summary)? == history_custody,
-            "controller custody policy changed during Agent approval"
-        );
-        let original = summary
-            .policy
-            .context("approved controller policy original absent")?;
-        let public = original
-            .methods
-            .iter()
-            .filter_map(|method| match method {
-                arkret_models_crypto::RecoveryMethod::RecoveryUnlock { keys } => Some(keys),
-                _ => None,
-            })
-            .flatten()
-            .find(|key| key.backup_hpke.key_agreement_ref == history_custody.recipient_key_ref)
-            .context("approved Agent history recipient absent")?;
-        let bytes = arkret::decode_multibase_base58btc(&public.backup_hpke.public_key_multibase)?;
-        let (codec, prefix) =
-            arkret::decode_multicodec_varint(&bytes).context("backup HPKE multicodec")?;
-        ensure!(
-            codec == 0xec && bytes.len() == prefix + 32,
-            "approved history recipient is not X25519"
-        );
-        let history_recipient_public = bytes[prefix..]
-            .try_into()
-            .map_err(|_| anyhow::anyhow!("backup recipient width"))?;
+        let history_recipient_public =
+            approved_recipient(controller, controller_account, &history_custody).await?;
         Ok(AgentPairedPrincipal {
             history_custody,
             custody_authorization: provision_event.event_id.clone(),
@@ -930,6 +945,24 @@ impl AgentRuntimeSession {
         scope: AgentKeyScope,
         evidence: Option<&mut provision_evidence::ProvisionEvidence>,
     ) -> Result<Self> {
+        let paired = Box::pin(Self::establish_paired_observed(
+            server,
+            &issuer,
+            controller,
+            controller_account,
+            label,
+            scope,
+            evidence,
+        ))
+        .await?;
+        crate::harness::heap_future(|| Self::issue_paired(server, issuer, paired)).await
+    }
+
+    async fn issue_paired(
+        server: &ArkretServer,
+        issuer: AgentSessionIssuer<'_>,
+        paired: AgentPairedPrincipal,
+    ) -> Result<Self> {
         let AgentPairedPrincipal {
             history_custody,
             custody_authorization,
@@ -943,16 +976,7 @@ impl AgentRuntimeSession {
             verification_method,
             key_authorization,
             authorization,
-        } = Box::pin(Self::establish_paired_observed(
-            server,
-            &issuer,
-            controller,
-            controller_account,
-            label,
-            scope,
-            evidence,
-        ))
-        .await?;
+        } = paired;
         let station = server.service_id().clone();
         let agent_id = agent_account.principal_id.clone();
         let operations: Vec<&str> = authorization
@@ -1029,6 +1053,51 @@ impl AgentRuntimeSession {
             issuer_request,
         })
     }
+}
+
+async fn approved_recipient(
+    controller: &TestActorClient,
+    controller_account: &AccountId,
+    history_custody: &arkret_models_crypto::AgentHistoryCustody,
+) -> Result<[u8; 32]> {
+    let policy: arkret_models_crypto::RecoveryPolicyStatusView = serde_json::from_value(
+        expect_json(
+            controller.get("/_arkret/root/identity/recovery-policy"),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    let summary = policy
+        .active_policy
+        .context("approved controller policy absent")?;
+    ensure!(
+        controller_history_custody(controller_account, &summary)? == *history_custody,
+        "controller custody policy changed during Agent approval"
+    );
+    let original = summary
+        .policy
+        .context("approved controller policy original absent")?;
+    let public = original
+        .methods
+        .iter()
+        .filter_map(|method| match method {
+            arkret_models_crypto::RecoveryMethod::RecoveryUnlock { keys } => Some(keys),
+            _ => None,
+        })
+        .flatten()
+        .find(|key| key.backup_hpke.key_agreement_ref == history_custody.recipient_key_ref)
+        .context("approved Agent history recipient absent")?;
+    let bytes = arkret::decode_multibase_base58btc(&public.backup_hpke.public_key_multibase)?;
+    let (codec, prefix) =
+        arkret::decode_multicodec_varint(&bytes).context("backup HPKE multicodec")?;
+    ensure!(
+        codec == 0xec && bytes.len() == prefix + 32,
+        "approved history recipient is not X25519"
+    );
+    let history_recipient_public = bytes[prefix..]
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("backup recipient width"))?;
+    Ok(history_recipient_public)
 }
 
 fn controller_history_custody(
@@ -1393,48 +1462,7 @@ pub async fn run_agent_runtime_session_live() -> Result<()> {
     );
 
     // The controller revokes the runtime key; the session ends with it.
-    let revoke = sign(
-        arkret_event_draft::build_agent_key_revoke_intent(
-            &arkret_models_collaboration::events_payloads::agent::AgentKeyRevokePayload {
-                agent_id: agent.agent_account.principal_id.clone(),
-                key_id: NonEmptyString::new(agent.verification_method.as_str())
-                    .map_err(anyhow::Error::msg)?,
-                revoked_by: controller_account.principal_id.clone(),
-                revoked_at: arkret::canonical::normalize_timestamp_canonical(Utc::now()),
-                reason: None,
-            },
-            ScopeRef::Realm {
-                realm_id: agent.agent_pcr.clone(),
-            },
-            ActorId::account(agent.agent_account.clone()),
-            ActorId::account(controller_account.clone()),
-            agent.delegation.clone(),
-            Utc::now(),
-        )?
-        .author_with_digest_suite(arkret::canonical::DigestSuite::Sha256)?,
-        &DidUrl::new(format!("{}#{}", principal.did, principal.device_id))
-            .map_err(anyhow::Error::msg)?,
-        principal.device_signing_key.to_bytes(),
-    )?;
-    let revoked: AuthoritySubmitResponseBody = serde_json::from_value(
-        expect_json(
-            controller
-                .post("/_arkret/self/events")
-                .json(&arkret_wire::EventAdmissionSubmission::new(revoke)),
-            StatusCode::OK,
-        )
-        .await?,
-    )?;
-    ensure!(
-        matches!(
-            revoked,
-            AuthoritySubmitResponseBody::Accepted {
-                status: AuthorityCommitStatus::Committed,
-                ..
-            }
-        ),
-        "the key revocation was not committed: {revoked:?}"
-    );
+    revoke_runtime_key(&controller, &agent).await?;
     let ended = agent
         .runtime
         .get("/_arkret/self/device-messages")
@@ -1503,6 +1531,60 @@ fn persist_and_reopen_agent_consume(
         "durable Agent consume request changed its exact signed bytes"
     );
     Ok(recovered)
+}
+
+async fn revoke_runtime_key(
+    controller: &TestActorClient,
+    agent: &AgentRuntimeSession,
+) -> Result<()> {
+    let controller_account = &agent.controller_account;
+    let principal = controller
+        .principal
+        .as_ref()
+        .context("controller signing device")?;
+    let revoke = sign(
+        arkret_event_draft::build_agent_key_revoke_intent(
+            &arkret_models_collaboration::events_payloads::agent::AgentKeyRevokePayload {
+                agent_id: agent.agent_account.principal_id.clone(),
+                key_id: NonEmptyString::new(agent.verification_method.as_str())
+                    .map_err(anyhow::Error::msg)?,
+                revoked_by: controller_account.principal_id.clone(),
+                revoked_at: arkret::canonical::normalize_timestamp_canonical(Utc::now()),
+                reason: None,
+            },
+            ScopeRef::Realm {
+                realm_id: agent.agent_pcr.clone(),
+            },
+            ActorId::account(agent.agent_account.clone()),
+            ActorId::account(controller_account.clone()),
+            agent.delegation.clone(),
+            Utc::now(),
+        )?
+        .author_with_digest_suite(arkret::canonical::DigestSuite::Sha256)?,
+        &DidUrl::new(format!("{}#{}", principal.did, principal.device_id))
+            .map_err(anyhow::Error::msg)?,
+        principal.device_signing_key.to_bytes(),
+    )?;
+    let revoked: AuthoritySubmitResponseBody = serde_json::from_value(
+        expect_json(
+            controller
+                .post("/_arkret/self/events")
+                .json(&arkret_wire::EventAdmissionSubmission::new(revoke)),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        matches!(
+            revoked,
+            AuthoritySubmitResponseBody::Accepted {
+                status: AuthorityCommitStatus::Committed,
+                ..
+            }
+        ),
+        "the key revocation was not committed: {revoked:?}"
+    );
+    Ok(())
 }
 
 /// An Agent publishes and durably joins using its authorized runtime key.
